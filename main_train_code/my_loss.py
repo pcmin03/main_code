@@ -32,16 +32,16 @@ class Custom_WeightedCrossEntropyLossV2(torch.nn.Module):
 
 
         # class_weights = self._class_weights(inp)
-        new_output = torch.argmax(net_output,dim=1)
+        # new_output = torch.argmax(net_output,dim=1)
         
-        new_output = torch.where(new_output>1,torch.ones_like(new_output),torch.zeros_like(new_output))
-        gt_ = torch.where(gt>1,torch.ones_like(gt),torch.zeros_like(gt))
+        # new_output = torch.where(new_output>1,torch.ones_like(new_output),torch.zeros_like(new_output))
+        # gt_ = torch.where(gt>1,torch.ones_like(gt),torch.zeros_like(gt))
         
         # new_output = (new_output >= 1) * torch.ones_like(new_output)
-        MSEloss = F.mse_loss(new_output.float(),gt_.float())
-        MSEloss = torch.sqrt(MSEloss)
+        # MSEloss = F.mse_loss(new_output.float(),gt_.float())
+        # MSEloss = torch.sqrt(MSEloss)
         
-        weight_MSEloss = 1/(1+MSEloss)
+        # weight_MSEloss = 1/(1+MSEloss)
         # print(weight_MSEloss)
 
         gt = gt.long()
@@ -63,7 +63,7 @@ class Custom_WeightedCrossEntropyLossV2(torch.nn.Module):
         
         BCEloss = F.cross_entropy(net_output ,gt)
         # print(BCEloss * weight_MSEloss,'123123',weight_MSEloss)
-        return  BCEloss * weight_MSEloss
+        return  BCEloss 
 class Custom_CE(torch.nn.Module):
     """
     WeightedCrossEntropyLoss (WCE) as described in https://arxiv.org/pdf/1707.03237.pdf
@@ -96,9 +96,9 @@ class Custom_CE(torch.nn.Module):
 
         gt = gt.view(-1,)
         # print(net_output.shape,gt.shape)
-        weight = torch.FloatTensor([1,0,0 ,1e-2]).cuda()
+        # weight = torch.FloatTensor([1,0,0 ,1e-2]).cuda()
         
-        BCEloss = F.cross_entropy(net_output ,gt,weight=weight)
+        BCEloss = F.cross_entropy(net_output ,gt)
         # BCEloss2 = F.cross_entropy(net_output ,gt,ignore_index=2)
         # print(BCEloss * weight_MSEloss,'123123',weight_MSEloss)
         return  BCEloss 
@@ -154,34 +154,43 @@ class Custom_TM_CE(torch.nn.Module):
         return  BCEloss 
 
 class Custom_Adaptive_DistanceMap(torch.nn.Module):
-    def forward(self, net_output, gt):
+    def forward(self, net_output, gt,weight=10,stage='forward'):
 
         # postive predict label
 
         # divide channel 
-        back_gt = torch.where(gt==0,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
-        body_gt = torch.where(gt==1,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
-        dend_gt = torch.where(gt==2,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1) 
-        axon_gt = torch.where(gt==3,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
-        
-        back_output = net_output[:,0:1,:,:]
+        if stage == 'forward':
+            back_gt = torch.where(gt==0,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
+            body_gt = torch.where(gt==1,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
+            dend_gt = torch.where(gt==2,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1) 
+            axon_gt = torch.where(gt==3,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
+            net_output = net_output[:,0:4]
+            back_output = net_output[:,0:1,:,:]
 
-        new_gt = torch.cat((back_gt, body_gt,dend_gt,axon_gt),dim=1).cuda().float()
-        
+            new_gt = torch.cat((back_gt, body_gt,dend_gt,axon_gt),dim=1).cuda().float()
+        else:
+            
+            back_gt = torch.where(gt==0,torch.zeros_like(gt),torch.ones_like(gt)).unsqueeze(1)
+            body_gt = torch.where(gt==1,torch.zeros_like(gt),torch.ones_like(gt)).unsqueeze(1)
+            dend_gt = torch.where(gt==2,torch.zeros_like(gt),torch.ones_like(gt)).unsqueeze(1) 
+            axon_gt = torch.where(gt==3,torch.zeros_like(gt),torch.ones_like(gt)).unsqueeze(1)
+            
+            net_output = net_output[:,4:8]
+            # print(net_output.shape,'11111111111111111')
+            back_output = net_output[:,0:1,:,:]
+            # print(back_gt.shape,body_gt.shape,dend_gt.shape,axon_gt.shape)
+            new_gt = torch.cat((back_gt, body_gt,dend_gt,axon_gt),dim=1).cuda().float()
+            # print(new_gt.shape,'111')
         zeros = torch.zeros_like(gt).unsqueeze(1)
+        
         zero_gt = torch.cat((zeros, zeros,dend_gt,axon_gt),dim=1).cuda().float()
-        
-        
-        # distance = np.array([ndimage.distance_transform_edt(i) for i in zero_gt.cpu().numpy()])
         Lambda = np.array([ndimage.distance_transform_edt(i) for i in zero_gt.cpu().numpy()])
-        # print(Lambda.shape,'123')
-
         _,_,_,size = Lambda.shape
         normalizedImg = np.zeros((size, size))
-        Lambda = torch.Tensor(cv2.normalize(Lambda,  normalizedImg, 0, 30, cv2.NORM_MINMAX)).cuda().float()
+        Lambda = torch.Tensor(cv2.normalize(Lambda,  normalizedImg, 1, 100, cv2.NORM_MINMAX)).cuda().float()
         # print(Lambda.shape,'456')
         # Lambda = torch.Tensor(np.array([ndimage.distance_transform_edt(i) for i in zero_gt]))
-        
+        # print(net_output.shape,new_gt.shape,'111')
         MSE = net_output - new_gt
         RMSE = torch.mul(MSE,MSE).float()
 
@@ -189,10 +198,10 @@ class Custom_Adaptive_DistanceMap(torch.nn.Module):
         back_gt = back_gt.float()
         back_output = back_output.float()
         
-        back_one= back_gt/(1+ (torch.abs(back_output - back_gt))).float()
+        back_one= back_gt/(1+ int(weight)*(torch.abs(back_output - back_gt))).float()
         back_zero = (1-back_gt).float()
 
-        adpative_loss = (back_one*RMSE + back_zero*RMSE*Lambda).float()
+        adpative_loss = (back_one*RMSE*Lambda + back_zero*RMSE*Lambda).float()
         # adpative_loss[:,2:3] = adpative_loss[:,2:3]*((dend_gt.float() + 0.01) * 100)
         # adpative_loss[:,3:4] = adpative_loss[:,3:4]*((axon_gt.float() + 0.01) * 100)
         
@@ -530,6 +539,8 @@ class BinaryDiceLoss(nn.Module):
         self.reduction = reduction
 
     def forward(self, predict, target):
+        predict=predict[:,1:2].cuda().float()
+        target = target.float()
         assert predict.shape[0] == target.shape[0], "predict & target batch size don't match"
         predict = predict.contiguous().view(predict.shape[0], -1)
         target = target.contiguous().view(target.shape[0], -1)
@@ -570,10 +581,10 @@ class DiceLoss(nn.Module):
         gt = target
         back_gt = torch.where(gt==0,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
         body_gt = torch.where(gt==1,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
-        dend_gt = torch.where(gt==2,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1) 
-        axon_gt = torch.where(gt==3,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
+        # dend_gt = torch.where(gt==2,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1) 
+        # axon_gt = torch.where(gt==3,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
         
-        target = torch.cat((back_gt, body_gt,dend_gt,axon_gt),dim=1).cuda().float()
+        target = torch.cat((back_gt, body_gt),dim=1).cuda().float()
         # print(predict.shape,target.shape)
         assert predict.shape == target.shape, 'predict & target shape do not match'
         dice = BinaryDiceLoss(**self.kwargs)

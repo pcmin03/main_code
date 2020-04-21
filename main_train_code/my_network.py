@@ -24,6 +24,7 @@ class ConvBlock(nn.Module):
         self.with_nonlinearity = with_nonlinearity
 
     def forward(self, x):
+        print(x.shape)
         x = self.conv(x)
         x = self.bn(x)
         if self.with_nonlinearity:
@@ -136,7 +137,7 @@ class Segmentataion_resnet101unet(nn.Module):
 class multiUpBlockForUNetWithResNet101(nn.Module):
 
     def __init__(self, in_channels, out_channels, up_conv_in_channels=None, up_conv_out_channels=None,
-                 upsampling_method="conv_transpose"):
+                 upsampling_method="conv_transpose",train='layer0'):
         super().__init__()
 
         if up_conv_in_channels == None:
@@ -144,7 +145,10 @@ class multiUpBlockForUNetWithResNet101(nn.Module):
         if up_conv_out_channels == None:
             up_conv_out_channels = out_channels
 
-        self.upsample = nn.ConvTranspose2d(up_conv_in_channels, up_conv_out_channels, kernel_size=2, stride=2)
+        if train=='layer0':
+            self.upsample = nn.ConvTranspose2d(up_conv_in_channels, up_conv_out_channels ,kernel_size=2, stride=2)
+        else : 
+            self.upsample = nn.ConvTranspose2d(up_conv_in_channels, up_conv_out_channels ,kernel_size=2, stride=2,padding=1)
 
         self.conv_block_1 = ConvBlock(in_channels, out_channels)
         self.conv_block_2 = ConvBlock(out_channels, out_channels)
@@ -155,105 +159,164 @@ class multiUpBlockForUNetWithResNet101(nn.Module):
         :param down_x: this is the output from the down block
         :return: upsampled feature map
         """
+        
+        print(up_x.shape,down_x.shape,'11111')
         x = self.upsample(up_x)
+        print(x.shape,'2222',down_x.shape,)
+        # print(x.shape, 'concat')
         x = torch.cat([x, down_x], 1)
         x = self.conv_block_1(x)
         x = self.conv_block_2(x)
         return x
 
 
-class multi_Segmentataion_resnet101unet(nn.Module):
-    DEPTH = 6
+def double_conv(in_channels, out_channels):
+    return nn.Sequential(
+        nn.Conv2d(in_channels, out_channels, 3, padding=1),
+        nn.ReLU(inplace=True),
+        nn.Conv2d(out_channels, out_channels, 3, padding=1),
+        nn.ReLU(inplace=True)
+    )   
 
-    def __init__(self, n_classes=2):
+
+class Multi_UNet(nn.Module):
+
+    def __init__(self, n_class=2):
         super().__init__()
-        # self.first = nn.Conv2d(1,3,3,1,padding=1)
-        resnet = models.resnet.resnet101(pretrained=True)
-        down_blocks = []
-        global_up_blocks = []
-        dend_up_blocks = []
-        axon_up_blocks = []
+        self.first = nn.Conv2d(1,3,3,1,padding=1)
+        self.dconv_down1 = double_conv(3, 64)
+        self.dconv_down2 = double_conv(64, 128)
+        self.dconv_down3 = double_conv(128, 256)
+        self.dconv_down4 = double_conv(256, 512)        
 
-        self.input_block = nn.Sequential(*list(resnet.children()))[:3]
-        self.input_pool = list(resnet.children())[3]
-        for bottleneck in list(resnet.children()):
-            if isinstance(bottleneck, nn.Sequential):
-                down_blocks.append(bottleneck)
-        self.down_blocks = nn.ModuleList(down_blocks)
-        self.bridge = Bridge(2048, 2048)
-        global_up_blocks.append(multiUpBlockForUNetWithResNet101(2048, 1024))
-        global_up_blocks.append(multiUpBlockForUNetWithResNet101(1024, 512))
-        global_up_blocks.append(multiUpBlockForUNetWithResNet101(512, 256))
-        global_up_blocks.append(multiUpBlockForUNetWithResNet101(in_channels=128 + 64, out_channels=128,
-                                                    up_conv_in_channels=256, up_conv_out_channels=128))
-        global_up_blocks.append(multiUpBlockForUNetWithResNet101(in_channels=64 + 3, out_channels=64,
-                                                    up_conv_in_channels=128, up_conv_out_channels=64))
-
-        self.global_up_blocks = nn.ModuleList(global_up_blocks)
-
-        dend_up_blocks.append(multiUpBlockForUNetWithResNet101(2048, 1024))
-        dend_up_blocks.append(multiUpBlockForUNetWithResNet101(1024, 512))
-        dend_up_blocks.append(multiUpBlockForUNetWithResNet101(512, 256))
-        dend_up_blocks.append(multiUpBlockForUNetWithResNet101(in_channels=128 + 64, out_channels=128,
-                                                    up_conv_in_channels=256, up_conv_out_channels=128))
-        dend_up_blocks.append(multiUpBlockForUNetWithResNet101(in_channels=64 + 3, out_channels=64,
-                                                    up_conv_in_channels=128, up_conv_out_channels=64))
-
-        self.dend_up_blocks = nn.ModuleList(dend_up_blocks)
-
-        axon_up_blocks.append(multiUpBlockForUNetWithResNet101(2048, 1024))
-        axon_up_blocks.append(multiUpBlockForUNetWithResNet101(1024, 512))
-        axon_up_blocks.append(multiUpBlockForUNetWithResNet101(512, 256))
-        axon_up_blocks.append(multiUpBlockForUNetWithResNet101(in_channels=128 + 64, out_channels=128,
-                                                    up_conv_in_channels=256, up_conv_out_channels=128))
-        axon_up_blocks.append(multiUpBlockForUNetWithResNet101(in_channels=64 + 3, out_channels=64,
-                                                    up_conv_in_channels=128, up_conv_out_channels=64))
-
-        self.axon_up_blocks = nn.ModuleList(axon_up_blocks)
-
-        self.out = nn.Conv2d(64, n_classes, kernel_size=1, stride=1)
-
-    def forward(self, x, with_output_feature_map=False,select_training='full'):
-        # x = self.first(x)
-        pre_pools = dict()
-        pre_pools[f"layer_0"] = x
-        x = self.input_block(x)
-        pre_pools[f"layer_1"] = x
-        x = self.input_pool(x)
-
-        for i, block in enumerate(self.down_blocks, 2):
-            x = block(x)
-            if i == (Segmentataion_resnet101unet.DEPTH - 1):
-                continue
-            pre_pools[f"layer_{i}"] = x
-
-
-        x = self.bridge(x)
+        self.maxpool = nn.MaxPool2d(2)
+        self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)        
         
-        if select_training == 'ful':
-            for i, block in enumerate(self.global_up_blocks, 1):
-                key = f"layer_{Segmentataion_resnet101unet.DEPTH - 1 - i}"
-                x = block(x, pre_pools[key])
-            output_feature_map = x
-            x = self.out(x)
-            return x
-
-        elif select_training == 'dend':
-            for i, block in enumerate(self.dend_up_blocks, 1):
-                key = f"layer_{Segmentataion_resnet101unet.DEPTH - 1 - i}"
-                x = block(x, pre_pools[key])
-            output_feature_map = x
-            x = self.out(x)
-            return x
+        self.body_up3 = double_conv(256 + 512, 256)
+        self.body_up2 = double_conv(128 + 256, 128)
+        self.body_up1 = double_conv(128 + 64, 64)
+        self.body_last = nn.Conv2d(64, n_class, 1)
         
-        elif select_training == 'axon':
-            for i, block in enumerate(self.axon_up_blocks, 1):
-                key = f"layer_{Segmentataion_resnet101unet.DEPTH - 1 - i}"
-                x = block(x, pre_pools[key])
-            output_feature_map = x
-            x = self.out(x)
-            return x
+        self.dend_up3 = double_conv(256 + 512, 256)
+        self.dend_up2 = double_conv(128 + 256, 128)
+        self.dend_up1 = double_conv(128 + 64, 64)
+        self.dend_last = nn.Conv2d(64, n_class, 1)
+        
+        self.axon_up3 = double_conv(256 + 512, 256)
+        self.axon_up2 = double_conv(128 + 256, 128)
+        self.axon_up1 = double_conv(128 + 64, 64)
+        self.axon_last = nn.Conv2d(64, n_class, 1)
+        
+        
+    def forward(self, x):
+        x = self.first(x)
+        conv1 = self.dconv_down1(x)
+        x = self.maxpool(conv1)
 
+        conv2 = self.dconv_down2(x)
+        x = self.maxpool(conv2)
+        
+        conv3 = self.dconv_down3(x)
+        x = self.maxpool(conv3)   
+        
+        middle = self.dconv_down4(x)
+
+        x = self.upsample(middle)        
+        x = torch.cat([x, conv3], dim=1)
+        x = self.body_up3(x)
+        x = self.upsample(x)        
+        x = torch.cat([x, conv2], dim=1)       
+        x = self.body_up2(x)
+        x = self.upsample(x)        
+        x = torch.cat([x, conv1], dim=1)   
+        x = self.body_up1(x)
+        body = self.body_last(x)
+
+        x = self.upsample(middle)        
+        x = torch.cat([x, conv3], dim=1)
+        x = self.dend_up3(x)
+        x = self.upsample(x)        
+        x = torch.cat([x, conv2], dim=1)       
+        x = self.dend_up2(x)
+        x = self.upsample(x)        
+        x = torch.cat([x, conv1], dim=1)   
+        x = self.dend_up1(x)
+        dend = self.dend_last(x)
+
+        x = self.upsample(middle)        
+        x = torch.cat([x, conv3], dim=1)
+        x = self.axon_up3(x)
+        x = self.upsample(x)        
+        x = torch.cat([x, conv2], dim=1)       
+        x = self.axon_up2(x)
+        x = self.upsample(x)        
+        x = torch.cat([x, conv1], dim=1)   
+        x = self.axon_up1(x)
+        axon = self.axon_last(x)
+        
+        return body, dend, axon
+
+class multi_Seg_UNet(nn.Module):
+
+    def __init__(self, in_channels=1, n_classes=2, feature_scale=2, is_deconv=True, is_batchnorm=True):
+        super(multi_Seg_UNet, self).__init__()
+        self.in_channels = in_channels
+        self.feature_scale = feature_scale
+        self.is_deconv = is_deconv
+        self.is_batchnorm = is_batchnorm
+        
+
+        filters = [64, 128, 256, 512]
+        filters = [int(x / self.feature_scale) for x in filters]
+
+        # downsampling
+        self.maxpool = nn.MaxPool2d(kernel_size=2)
+        self.first = nn.Conv2d(1,3,3,1,padding=1)
+        self.conv1 = unetConv2(self.in_channels, filters[0], self.is_batchnorm)
+        self.conv2 = unetConv2(filters[0], filters[1], self.is_batchnorm)
+        self.conv3 = unetConv2(filters[1], filters[2], self.is_batchnorm)
+        self.center = unetConv2(filters[2], filters[3], self.is_batchnorm)
+        # self.center = unetConv2(filters[3], filters[4], self.is_batchnorm)
+        # upsampling
+        # self.up_concat4 = unetUp(filters[4], filters[3], self.is_deconv)
+        self.up_concat3 = unetUp(filters[3], filters[2], self.is_deconv)
+        self.up_concat2 = unetUp(filters[2], filters[1], self.is_deconv)
+        self.up_concat1 = unetUp(filters[1], filters[0], self.is_deconv)
+        # final conv (without any concat)
+        self.final = nn.Conv2d(filters[0], n_classes, 1)
+
+        # initialise weights
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                init_weights(m, init_type='kaiming')
+            elif isinstance(m, nn.BatchNorm2d):
+                init_weights(m, init_type='kaiming')
+
+    def forward(self, inputs):
+        inputs = self.first(inputs)
+        conv1 = self.conv1(inputs)           # 16*512*512
+        maxpool1 = self.maxpool(conv1)       # 16*256*256
+        
+        conv2 = self.conv2(maxpool1)         # 32*256*256
+        maxpool2 = self.maxpool(conv2)       # 32*128*128
+
+        conv3 = self.conv3(maxpool2)         # 64*128*128
+        maxpool3 = self.maxpool(conv3)       # 64*64*64
+
+        # conv4 = self.conv4(maxpool3)         # 128*64*64
+        # maxpool4 = self.maxpool(conv4)       # 128*32*32
+
+        center = self.center(maxpool3)       # 256*32*32
+        print(center.shape)
+        up4 = self.up_concat4(center,conv4)  # 128*64*64
+        up3 = self.up_concat3(up4,conv3)     # 64*128*128
+        up2 = self.up_concat2(up3,conv2)     # 32*256*256
+        up1 = self.up_concat1(up2,conv1)     # 16*512*512
+
+        final = self.final(up1)
+
+        return final
+    
 #=====================================================================#
 #=======================3d segmentation network=======================#
 #=====================================================================#
@@ -792,8 +855,8 @@ class NestedUNet(nn.Module):
 
 
 ###load model 
-def pretrain_unet():
-    return smp.Unet('resnet34',in_channels=1,classes=4,activation='softmax')
+def pretrain_unet(classnum):
+    return smp.Unet('resnet34',in_channels=1,classes=classnum,activation='softmax')
 def pretrain_efficent_unet():
     return smp.Unet('efficientnet-b5',in_channels=1,classes=4,activation='softmax')
 

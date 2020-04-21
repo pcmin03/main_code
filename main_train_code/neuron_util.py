@@ -34,10 +34,8 @@ def decode_segmap(image, nc=4,name='full'):
         label_colors = np.array([(0,0,0), (0, 146, 146)])
     elif name == 'full':
         label_colors = np.array([(0,0,0),(254,254,0),(254,24,254),(0,146,146)])
-    elif name == 'max':
-        label_colors = np.array([(0,0,0),(254,254,0),(254,24,254),(0,146,146),
-                                (0,0,0),(254,254,0),(254,24,254),(0,146,146)])
-    
+    elif name == 'inverse':
+        label_colors = np.array([(0,0,0),(254,254,0),(254,254,0),(254,254,0)])
     # print(label_colors.shape)
     r = np.zeros_like(image).astype(np.uint8)
     g = np.zeros_like(image).astype(np.uint8)

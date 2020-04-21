@@ -89,11 +89,11 @@ class mydataset_3d(Dataset):
         return clip,labels
 
 class mydataset_2d(Dataset):
-    def __init__(self,imageDir,labelDir,usetranform=True,patchwise=True,threshold=0.1,phase='train'):
+    def __init__(self,imageDir,labelDir,usetranform=True,patchwise=True,threshold=0.1,phase='train',multi=False):
 
         self.imageDir = imageDir
         self.labelDir = labelDir
-        
+        self.multi = multi
         images = []
         labels = []
           
@@ -237,6 +237,13 @@ class mydataset_2d(Dataset):
         # image = image.convert('rgb')
 
         clip = self.L_transform(image)
+        label = np.array(label)
+        if self.multi == True:
+            back_lable = np.where(label==0,np.ones_like(label),np.zeros_like(label))
+            body_lable = np.where(label==1,np.ones_like(label),np.zeros_like(label))
+            dend_lable = np.where(label==2,np.ones_like(label),np.zeros_like(label))
+            axon_lable = np.where(label==3,np.ones_like(label),np.zeros_like(label))
+            label = [back_lable, body_lable,dend_lable,axon_lable]
         label = np.array(label)
 
         return clip,label
