@@ -3,7 +3,7 @@ import skimage ,numbers
 import glob, random
 
 from natsort import natsorted
-
+# from glob import glob
 from numpy.lib.stride_tricks import as_strided
 from torch.utils.data import Dataset
 import torch
@@ -89,55 +89,60 @@ class mydataset_3d(Dataset):
         return clip,labels
 
 class mydataset_2d(Dataset):
-    def __init__(self,imageDir,labelDir,usetranform=True,patchwise=True,threshold=0.1,phase='train',multi=False):
-
-        self.imageDir = imageDir
-        self.labelDir = labelDir
-        self.multi = multi
-        images = []
-        labels = []
-          
-        print(f"=====making dataset======")
-        for i in range(len(self.imageDir)):
-            
-            img = skimage.io.imread(self.imageDir[i])
-            lab = skimage.io.imread(self.labelDir[i])
-            lab = skimage.color.rgb2gray(lab)
-            
-            normalizedImg = np.zeros((1024, 1024))
-            img = cv2.normalize(img,  normalizedImg, 0, 255, cv2.NORM_MINMAX)
-            img = img.astype('uint8')
-            
-            if phase=='train':  
-                if patchwise == True:
-                    images.append(view_as_blocks(img ,block_shape=(128,128)))
-                    labels.append(view_as_blocks(lab ,block_shape=(128,128)))
-                else:    
-                    images.append(self.view_as_windows(img ,(128,128),20,threshold=threshold))
-                    labels.append(self.view_as_windows(lab ,(128,128),20,threshold=threshold))
-            else:
-                images.append(img)
-                labels.append(lab)
-
-        self.images = np.array(images)
-        self.labels = np.array(labels)
+    def __init__(self,imageDir,labelDir,usetranform=True,patchwise=True,threshold=0.1,phase='train',multi=False,isDir=True):
         
-        if phase =='train':
-            
-            num,patch,_,im_size,_=self.images.shape
-            self.images = np.reshape(self.images,[num*patch*patch,im_size,im_size])
-            self.labels = np.reshape(self.labels,[num*patch*patch,im_size,im_size])
-
-            new_image = []
-            new_label = []
-            for i,vlaue in enumerate(self.labels):
-                count_num = np.sum(np.array(vlaue) > 0)
+        self.multi = multi
+        self.isDir = isDir
+        if isDir == True:
+            self.imageDir = imageDir
+            self.labelDir = labelDir
+            images = []
+            labels = []          
+            print(f"=====making dataset======")
+            for i in range(len(self.imageDir)):
                 
-                if count_num >= ((patch*patch)*threshold):
-                    new_label.append(vlaue)
-                    new_image.append(self.images[i])
-            self.images = np.array(new_image)
-            self.labels = np.array(new_label)
+                img = skimage.io.imread(self.imageDir[i])
+                lab = skimage.io.imread(self.labelDir[i])
+                lab = skimage.color.rgb2gray(lab)
+                
+                normalizedImg = np.zeros((1024, 1024))
+                img = cv2.normalize(img,  normalizedImg, 0, 255, cv2.NORM_MINMAX)
+                img = img.astype('uint8')
+                
+                if phase=='train':  
+                    if patchwise == True:
+                        images.append(view_as_blocks(img ,block_shape=(128,128)))
+                        labels.append(view_as_blocks(lab ,block_shape=(128,128)))
+                    else:    
+                        images.append(self.view_as_windows(img ,(128,128),20,threshold=threshold))
+                        labels.append(self.view_as_windows(lab ,(128,128),20,threshold=threshold))
+                else:
+                    images.append(img)
+                    labels.append(lab)
+
+            self.images = np.array(images)
+            self.labels = np.array(labels)
+            
+            if phase =='train':
+                
+                num,patch,_,im_size,_=self.images.shape
+                self.images = np.reshape(self.images,[num*patch*patch,im_size,im_size])
+                self.labels = np.reshape(self.labels,[num*patch*patch,im_size,im_size])
+
+                new_image = []
+                new_label = []
+                for i,vlaue in enumerate(self.labels):
+                    count_num = np.sum(np.array(vlaue) > 0)
+                    
+                    if count_num >= ((patch*patch)*threshold):
+                        new_label.append(vlaue)
+                        new_image.append(self.images[i])
+                self.images = np.array(new_image)
+                self.labels = np.array(new_label)
+                print(self.images.shape,'1111111111111111111111111')
+        else:
+            self.images = np.array(natsorted(glob.glob(imageDir+'*')))
+            self.labels = np.array(natsorted(glob.glob(labelDir+'*')))
 
         self.transform = transforms.Compose([tr.RandomHorizontalFlip()])
         self.L_transform = transforms.Compose([transforms.ToTensor(),
@@ -207,7 +212,10 @@ class mydataset_2d(Dataset):
         
         image = self.images[index]
         label = self.labels[index]
-
+        if self.isDir == False:
+            image = skimage.io.imread(image)
+            label = skimage.io.imread(label)
+            label = skimage.color.rgb2gray(label)
         image = np.array(image).astype('uint8')
         label = np.array(label)
         
@@ -256,8 +264,8 @@ class prjection_mydataset(Dataset):
             self.labels = labelDir
             
         elif kfold_cross == False: 
-            img = glob.glob(imageDir +'*')
-            lab = glob.glob(labelDir +'*')
+            img = glob(imageDir +'*')
+            lab = glob(labelDir +'*')
 
             self.images = natsorted(img)
             self.labels = natsorted(lab)

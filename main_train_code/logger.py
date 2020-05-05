@@ -12,7 +12,7 @@ class Logger(object):
         self.log_dir = log_dir
         self.batch_size =batch_size
         self.board_dir = self.log_dir+name+'board/'
-        merge_path = './merge_path/board'+name+str(num)+'/'
+        merge_path = './merge_path/board'+name+'/'+name+str(num)+'/'
         if not os.path.exists(self.log_dir):
             print('----- Make_save_Dir-------------')
             os.makedirs(self.log_dir)

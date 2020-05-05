@@ -83,11 +83,11 @@ if model=='res_unet':
 
 # path ='../nest_unetfull_model3_new/'
 deepsupervision = True
-trainning = True
+trainning = False
 testing = True
 use_postprocessing = True
 deleteall = False
-load_pretrain = False
+load_pretrain = True
 patchwise = False
 #set data path 
 imageDir= '../project_original_image/'
@@ -176,7 +176,7 @@ else:
     
 if load_pretrain == True:
     # if os.path.exists(path+"lastsave_models{}.pth"):
-    checkpoint = torch.load(path +"lastsave_models{}.pth")
+    checkpoint = torch.load(path +"bestsave_models{}.pth")
     gen.load_state_dict(checkpoint['gen_model'])
     dis.load_state_dict(checkpoint['dis_model'])
 
@@ -185,8 +185,8 @@ if load_pretrain == True:
 # criterion = Custom_WeightedCrossEntropyLossV2().to(device)
 
 # criterion = Custom_Adaptive().to(device)
-criterion = Custom_Adaptive_DistanceMap().to(device)
-# criterion = Custom_CE().to(device)
+# criterion = Custom_Adaptive_DistanceMap().to(device)
+criterion = Custom_CE().to(device)
 # criterion = Custom_Adaptive_RMSE().to(device)
 # criterion_v2 = GDiceLossV2().to(device)
 #set matrix score
