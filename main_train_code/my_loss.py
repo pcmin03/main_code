@@ -199,6 +199,18 @@ class Custom_Adaptive_DistanceMap(torch.nn.Module):
             back_output = net_output[:,0:1,:,:]
 
             new_gt = torch.cat((back_gt, body_gt,dend_gt,axon_gt),dim=1).cuda().float()
+
+        # L1 loss
+        back_gt = back_gt.float()
+        back_output = back_output.float()
+        
+        back_one= back_gt/(1+ int(self.weight)*(torch.abs(back_output - back_gt))).float()
+        back_zero = (1-back_gt).float()
+
+        MSE = net_output - new_gt
+        RMSE = torch.mul(MSE,MSE).float()
+        
+        return torch.mean((back_one*RMSE + back_zero*RMSE).float())
         # elif stage == 'inverse':
         #     back_gt = torch.where(gt==0,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
         #     body_gt = torch.where(gt==1,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
@@ -241,17 +253,6 @@ class Custom_Adaptive_DistanceMap(torch.nn.Module):
         #     po_back_zero = (1-back_po_gt).float() * po_RMSE
         #     return torch.mean(ne_back_zero) + torch.mean(po_back_zero)
         #distance Map (weight dendrite, axon)
-        # L1 loss
-        back_gt = back_gt.float()
-        back_output = back_output.float()
-        
-        back_one= back_gt/(1+ int(self.weight)*(torch.abs(back_output - back_gt))).float()
-        back_zero = (1-back_gt).float()
-
-        MSE = net_output - new_gt
-        RMSE = torch.mul(MSE,MSE).float()
-
-
         if self.dis_map == True:
             # zeros = torch.zeros_like(gt).unsqueeze(1)
             # ones = torch.ones_like(gt).unsqueeze(1)
@@ -269,6 +270,103 @@ class Custom_Adaptive_DistanceMap(torch.nn.Module):
         
         else:        
             return torch.mean((back_one*RMSE + back_zero*RMSE).float())
+class Custom_Adaptive_class_DistanceMap(torch.nn.Module):
+    
+    def __init__(self,weight,distanace_map=False):
+        super(Custom_Adaptive_class_DistanceMap,self).__init__()
+        self.weight = weight
+        self.dis_map = distanace_map
+
+    def forward(self, net_output, gt,stage='forward'):
+
+        # postive predict label
+
+        # divide channel 
+        if stage == 'forward':
+            back_gt = torch.where(gt==0,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
+            body_gt = torch.where(gt==1,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
+            dend_gt = torch.where(gt==2,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1) 
+            axon_gt = torch.where(gt==3,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
+            net_output = net_output
+            back_output = net_output[:,0:1,:,:]
+
+            new_gt = torch.cat((back_gt, body_gt,dend_gt,axon_gt),dim=1).cuda().float()
+
+        #distance Map (weight dendrite, axon)
+        # L1 loss
+        back_gt = back_gt.float()
+        back_output = back_output.float()
+        
+        
+        ad_weight = 100
+        decrease_weight = 1/(1+ 100)
+
+        back_one = back_gt/(1+ int(self.weight)*(torch.abs(back_output - back_gt))).float()
+        back_zero = (1-back_gt).float()
+
+        bodyMSE = net_output[:,1:2] - new_gt[:,1:2]
+        dendMSE = net_output[:,2:3] - new_gt[:,2:3]
+        axonMSE = net_output[:,3:4] - new_gt[:,3:4]
+
+        MSE = net_output - new_gt
+        RMSE = torch.mul(MSE,MSE).float()
+        
+        bodyRMSE = decrease_weight * torch.mul(bodyMSE,bodyMSE).float()
+        dendRMSE = decrease_weight * torch.mul(dendMSE,dendMSE).float()
+        axonRMSE = ad_weight * torch.mul(axonMSE,axonMSE).float()
+
+        return torch.mean((back_one*RMSE + back_zero*(bodyRMSE+dendRMSE+axonRMSE)).float())
+
+class Custom_Adaptive_Gaussian_DistanceMap(torch.nn.Module):
+    
+    def __init__(self,weight,distanace_map=False):
+        super(Custom_Adaptive_Gaussian_DistanceMap,self).__init__()
+        self.weight = weight
+        self.dis_map = distanace_map
+
+
+    def forward(self, net_output, gt,stage='forward'):
+
+        # postive predict label
+        # back_one= back_gt * self.gaussian(back_output,back_gt,float(self.weight)).float()
+
+        # divide channel 
+        if stage == 'forward':
+            back_gt = torch.where(gt==0,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
+            body_gt = torch.where(gt==1,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
+            dend_gt = torch.where(gt==2,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1) 
+            axon_gt = torch.where(gt==3,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
+        
+        back_output = net_output[:,0:1,:,:]
+        #distance Map (weight dendrite, axon)
+
+        #forground image & forground ground truth 
+        new_gt = torch.cat((back_gt, body_gt,dend_gt,axon_gt),dim=1).cuda().float()
+
+        #background image & background ground truth
+        back_gt = back_gt.float()
+        back_output = back_output.float()
+
+        #Gaussian weight : weight = 0.1
+        # gau_numer = -(torch.pow(back_output - back_gt, 2.))
+        # gau_deno = float(self.weight)
+        # gaussian_fc = torch.exp( gau_numer/gau_deno)
+
+        gau_numer = float(self.weight) *(torch.pow(back_output - back_gt, 2.))
+        gau_deno = torch.exp(torch.ones(1)).cuda().float()
+        gaussian_fc = torch.exp( -(gau_numer/gau_deno))
+
+        #background loss
+        back_one = (back_gt * (gaussian_fc+float(0.0001))).float()
+        #forground loss
+        back_zero = (1-back_gt).float()
+
+        MSE = net_output - new_gt
+        RMSE = torch.mul(MSE,MSE).float()
+        
+        return torch.mean((back_one*RMSE + back_zero*RMSE).float())
+
+        # return torch.mean((back_one*RMSE + back_zero*(bodyRMSE+dendRMSE+axonRMSE)).float())
 
 
 

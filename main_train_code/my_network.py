@@ -8,7 +8,7 @@ from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 
 import segmentation_models_pytorch as smp
 
-# import resnet
+
 # from resnet import *
 # from resnet import *
 #=====================================================================#
@@ -950,59 +950,111 @@ class classification_model(nn.Module):
 #         return correct, labeled, inter, union
 
 from base import BaseNet
-class DANet(nn.Module):
-    DEPTH = 7
+# import dilatedresnet as di_resnet
 
-    def __init__(self, nclass, norm_layer=nn.BatchNorm2d):
-        super(DANet, self).__init__()
-        self.head = DANetHead(1024, nclass, norm_layer)
-
-        self.first = nn.Conv2d(1,3,3,1,padding=1)
-        resnet = models.resnet.resnet101(pretrained=True)
-        down_blocks = []
-        up_blocks = []
-        self.input_block = nn.Sequential(*list(resnet.children()))[:3]
-        self.input_pool = list(resnet.children())[3]
-        for bottleneck in list(resnet.children()):
-            if isinstance(bottleneck, nn.Sequential):
-                down_blocks.append(bottleneck)
-        self.down_blocks = nn.ModuleList(down_blocks)
-
-    def base_forward(self, x):
-        x = self.first(x)
-        pre_pools = dict()
-        pre_pools[f"layer_0"] = x
-        x = self.input_block(x)
-        pre_pools[f"layer_1"] = x
-        x = self.input_pool(x)
-
-        for i, block in enumerate(self.down_blocks, 2):
-            x = block(x)
-            if i == (Segmentataion_resnet101unet.DEPTH - 1):
-                continue
-            # print(i)
-            # print(x.shape)
-            pre_pools[f"layer_{i}"] = x
-
-        return pre_pools[f"layer_{3}"],pre_pools[f"layer_{4}"]
+class DANet(BaseNet):
+    r"""Fully Convolutional Networks for Semantic Segmentation
+    Parameters
+    ----------
+    nclass : int
+        Number of categories for the training dataset.
+    backbone : string
+        Pre-trained dilated backbone network type (default:'resnet50'; 'resnet50',
+        'resnet101' or 'resnet152').
+    norm_layer : object
+        Normalization layer used in backbone network (default: :class:`mxnet.gluon.nn.BatchNorm`;
+    Reference:
+        Long, Jonathan, Evan Shelhamer, and Trevor Darrell. "Fully convolutional networks
+        for semantic segmentation." *CVPR*, 2015
+    """
+    def __init__(self, nclass=4, backbone='resnet50', aux=False, se_loss=False, norm_layer=nn.BatchNorm2d, **kwargs):
+        super(DANet, self).__init__(nclass, backbone, aux, se_loss, norm_layer=norm_layer, **kwargs)
+        self.head = DANetHead(2048, nclass, norm_layer)
 
     def forward(self, x):
         imsize = x.size()[2:]
-        c3, c4 = self.base_forward(x)
-        print(c3.shape,c4.shape)
-        # _, _, c3, c4 = pretrain_resnet
+        _, _, c3, c4 = self.base_forward(x)
 
         x = self.head(c4)
         x = list(x)
-        # print(x)
-        x[0] = F.upsample(x[0], imsize, mode ='bilinear', align_corners =  True)
-        x[1] = F.upsample(x[1], imsize, mode ='bilinear', align_corners =  True)
-        x[2] = F.upsample(x[2], imsize, mode ='bilinear', align_corners =  True)
-        # print(x[1].shape)
-        outputs = [x[0]]
-        outputs.append(x[1])
-        outputs.append(x[2])
-        return tuple(outputs)
+        x[0] = F.upsample(x[0], imsize, **self._up_kwargs)
+        x[1] = F.upsample(x[1], imsize, **self._up_kwargs)
+        x[2] = F.upsample(x[2], imsize, **self._up_kwargs)
+
+        # outputs = [x[0]]
+        # outputs.append(x[1])
+        # outputs.append(x[2])
+        return [x[0],x[1],x[2]]
+# class DANet(nn.Module):
+#     DEPTH = 7
+
+#     def __init__(self, nclass,dilated=True, norm_layer=nn.BatchNorm2d):
+#         super(DANet, self).__init__()
+#         self.dilated = dilated
+#         self.head = DANetHead(1024, nclass, norm_layer)
+
+#         self.first = nn.Conv2d(1,3,3,1,padding=1)
+#         resnet = models.resnet.resnet101(pretrained=True)
+#         down_blocks = []
+#         up_blocks = []
+#         self.input_block = nn.Sequential(*list(resnet.children()))[:3]
+#         self.input_pool = list(resnet.children())[3]
+#         for bottleneck in list(resnet.children()):
+#             if isinstance(bottleneck, nn.Sequential):
+#                 down_blocks.append(bottleneck)
+#         self.down_blocks = nn.ModuleList(down_blocks)
+
+#     def base_forward(self, x):
+#         if self.dilated == True:
+#             imsize = x.size()[2:]
+#             _, _, c3, c4 = self.base_forward(x)
+
+#             x = self.head(c4)
+#             x = list(x)
+#             x[0] = upsample(x[0], imsize, **self._up_kwargs)
+#             x[1] = upsample(x[1], imsize, **self._up_kwargs)
+#             x[2] = upsample(x[2], imsize, **self._up_kwargs)
+
+#             outputs = [x[0]]
+#             outputs.append(x[1])
+#             outputs.append(x[2])
+#             return tuple(outputs)
+
+#         else : 
+#             x = self.first(x)
+#             pre_pools = dict()
+#             pre_pools[f"layer_0"] = x
+#             x = self.input_block(x)
+#             pre_pools[f"layer_1"] = x
+#             x = self.input_pool(x)
+
+#             for i, block in enumerate(self.down_blocks, 2):
+#                 x = block(x)
+#                 if i == (Segmentataion_resnet101unet.DEPTH - 1):
+#                     continue
+#                 # print(i)
+#                 # print(x.shape)
+#                 pre_pools[f"layer_{i}"] = x
+
+#             return pre_pools[f"layer_{3}"],pre_pools[f"layer_{4}"]
+
+#     def forward(self, x):
+#         imsize = x.size()[2:]
+#         c3, c4 = self.base_forward(x)
+#         print(c3.shape,c4.shape)
+#         # _, _, c3, c4 = pretrain_resnet
+
+#         x = self.head(c4)
+#         x = list(x)
+#         # print(x)
+#         x[0] = F.upsample(x[0], imsize, mode ='bilinear', align_corners =  True)
+#         x[1] = F.upsample(x[1], imsize, mode ='bilinear', align_corners =  True)
+#         x[2] = F.upsample(x[2], imsize, mode ='bilinear', align_corners =  True)
+#         # print(x[1].shape)
+#         outputs = [x[0]]
+#         outputs.append(x[1])
+#         outputs.append(x[2])
+#         return tuple(outputs)
         
 class DANetHead(nn.Module):
     def __init__(self, in_channels, out_channels, norm_layer):
@@ -1116,161 +1168,6 @@ class CAM_Module(nn.Module):
         out = self.gamma*out + x
         return out
 
-
-# class conv_block(nn.Module):
-#     def __init__(self,ch_in,ch_out):
-#         super(conv_block,self).__init__()
-#         self.conv = nn.Sequential(
-#             nn.Conv2d(ch_in, ch_out, kernel_size=3,stride=1,padding=1,bias=True),
-#             nn.BatchNorm2d(ch_out),
-#             nn.ReLU(inplace=True),
-#             nn.Conv2d(ch_out, ch_out, kernel_size=3,stride=1,padding=1,bias=True),
-#             nn.BatchNorm2d(ch_out),
-#             nn.ReLU(inplace=True)
-#         )
-
-
-#     def forward(self,x):
-#         x = self.conv(x)
-#         return x
-
-# class up_conv(nn.Module):
-#     def __init__(self,ch_in,ch_out):
-#         super(up_conv,self).__init__()
-#         self.up = nn.Sequential(
-#             nn.Upsample(scale_factor=2),
-#             nn.Conv2d(ch_in,ch_out,kernel_size=3,stride=1,padding=1,bias=True),
-# 		    nn.BatchNorm2d(ch_out),
-# 			nn.ReLU(inplace=True)
-#         )
-
-#     def forward(self,x):
-#         x = self.up(x)
-#         return x
-
-# class Attention_block(nn.Module):
-#     def __init__(self,F_g,F_l,F_int):
-#         super(Attention_block,self).__init__()
-#         self.W_g = nn.Sequential(
-#             nn.Conv2d(F_g, F_int, kernel_size=1,stride=1,padding=0,bias=True),
-#             nn.BatchNorm2d(F_int)
-#             )
-        
-#         self.W_x = nn.Sequential(
-#             nn.Conv2d(F_l, F_int, kernel_size=1,stride=1,padding=0,bias=True),
-#             nn.BatchNorm2d(F_int)
-#         )
-
-#         self.psi = nn.Sequential(
-#             nn.Conv2d(F_int, 1, kernel_size=1,stride=1,padding=0,bias=True),
-#             nn.BatchNorm2d(1),
-#             nn.Sigmoid()
-#         )
-        
-#         self.relu = nn.ReLU(inplace=True)
-        
-#     def forward(self,g,x):
-#         g1 = self.W_g(g)
-#         x1 = self.W_x(x)
-#         psi = self.relu(g1+x1)
-#         psi = self.psi(psi)
-
-#         return x*psi
-
-# class AttU_Net(nn.Module):
-#     DEPTH = 4
-#     def __init__(self,img_ch=3,output_ch=4):
-#         super(AttU_Net,self).__init__()
-        
-#         self.first = nn.Conv2d(1,3,3,1,padding=1)
-#         resnet = models.resnet.resnet101(pretrained=True)
-#         down_blocks = []
-#         up_blocks = []
-#         self.input_block = nn.Sequential(*list(resnet.children()))[:3]
-#         self.input_pool = list(resnet.children())[3]
-#         # print(list(resnet.children())[5])
-#         for bottleneck in list(resnet.children()):
-#             if isinstance(bottleneck, nn.Sequential):
-#                 down_blocks.append(bottleneck)
-#         self.down_blocks = nn.ModuleList(down_blocks)
-#         self.bridge = Bridge(1024, 1024)
-
-#         self.Up5 = up_conv(ch_in=1024,ch_out=512)
-#         self.Att5 = Attention_block(F_g=512,F_l=512,F_int=256)
-#         self.Up_conv5 = Bridge(1024, 512)
-
-#         self.Up4 = up_conv(ch_in=512,ch_out=256)
-#         self.Att4 = Attention_block(F_g=256,F_l=256,F_int=128)
-#         self.Up_conv4 = Bridge(512, 256)
-        
-#         self.Up3 = up_conv(ch_in=256,ch_out=128)
-#         self.Att3 = Attention_block(F_g=128,F_l=128,F_int=64)
-#         self.Up_conv3 = Bridge(256,128)
-        
-#         self.Up2 = up_conv(ch_in=128,ch_out=64)
-#         self.Att2 = Attention_block(F_g=64,F_l=64,F_int=32)
-#         self.Up_conv2 = Bridge(128, 64)
-
-#         self.Conv_1x1 = nn.Conv2d(64,output_ch,kernel_size=1,stride=1,padding=0)
-
-
-#     def forward(self,x):
-#         # encoding path
-
-#         x = self.first(x)
-#         pre_pools = dict()
-#         pre_pools[f"layer_0"] = x
-#         x = self.input_block(x)
-#         pre_pools[f"layer_1"] = x
-#         x = self.input_pool(x)
-
-#         for i, block in enumerate(self.down_blocks, 2):
-            
-#             if i <5:
-#                 x = block(x)
-#                 if i == (Segmentataion_resnet101unet.DEPTH - 1):
-#                     continue
-#                 pre_pools[f"layer_{i}"] = x
-#                 print(i)
-#         # print(x.shape,'156156')
-#         x = self.bridge(x)
-#         # print(x.shape,'222')
-        
-#         x1 = pre_pools[f"layer_1"]
-#         x2 = pre_pools[f"layer_2"]
-#         x3 = pre_pools[f"layer_3"]
-#         x4 = pre_pools[f"layer_4"]
-#         x5 = x
-#         # print
-#         print(x1.shape,x2.shape,x3.shape,x4.shape,x5.shape)
-
-#         # decoding + concat path
-#         d5 = self.Up5(x5)
-        
-#         x4 = self.Att5(g=d5,x=x4)
-#         d5 = torch.cat((x4,d5),dim=1)        
-#         d5 = self.Up_conv5(d5)
-#         # print(d5.shape,'11')
-        
-#         d4 = self.Up4(d5)
-#         x3 = self.Att4(g=d4,x=x3)
-#         d4 = torch.cat((x3,d4),dim=1)
-#         d4 = self.Up_conv4(d4)
-        
-
-#         d3 = self.Up3(d4)
-#         x2 = self.Att3(g=d3,x=x2)
-#         d3 = torch.cat((x2,d3),dim=1)
-#         d3 = self.Up_conv3(d3)
-
-#         d2 = self.Up2(d3)
-#         x1 = self.Att2(g=d2,x=x1)
-#         d2 = torch.cat((x1,d2),dim=1)
-#         d2 = self.Up_conv2(d2)
-
-#         d1 = self.Conv_1x1(d2)
-
-#         return d1
 
 
 import torch
@@ -1405,143 +1302,6 @@ class Attention_block(nn.Module):
         psi = self.psi(psi)
 
         return x*psi
-
-
-class U_Net(nn.Module):
-    def __init__(self,img_ch=3,output_ch=1):
-        super(U_Net,self).__init__()
-        
-        self.Maxpool = nn.MaxPool2d(kernel_size=2,stride=2)
-
-        self.Conv1 = conv_block(ch_in=img_ch,ch_out=64)
-        self.Conv2 = conv_block(ch_in=64,ch_out=128)
-        self.Conv3 = conv_block(ch_in=128,ch_out=256)
-        self.Conv4 = conv_block(ch_in=256,ch_out=512)
-        self.Conv5 = conv_block(ch_in=512,ch_out=1024)
-
-        self.Up5 = up_conv(ch_in=1024,ch_out=512)
-        self.Up_conv5 = conv_block(ch_in=1024, ch_out=512)
-
-        self.Up4 = up_conv(ch_in=512,ch_out=256)
-        self.Up_conv4 = conv_block(ch_in=512, ch_out=256)
-        
-        self.Up3 = up_conv(ch_in=256,ch_out=128)
-        self.Up_conv3 = conv_block(ch_in=256, ch_out=128)
-        
-        self.Up2 = up_conv(ch_in=128,ch_out=64)
-        self.Up_conv2 = conv_block(ch_in=128, ch_out=64)
-
-        self.Conv_1x1 = nn.Conv2d(64,output_ch,kernel_size=1,stride=1,padding=0)
-
-
-    def forward(self,x):
-        # encoding path
-        x1 = self.Conv1(x)
-
-        x2 = self.Maxpool(x1)
-        x2 = self.Conv2(x2)
-        
-        x3 = self.Maxpool(x2)
-        x3 = self.Conv3(x3)
-
-        x4 = self.Maxpool(x3)
-        x4 = self.Conv4(x4)
-
-        x5 = self.Maxpool(x4)
-        x5 = self.Conv5(x5)
-
-        # decoding + concat path
-        d5 = self.Up5(x5)
-        d5 = torch.cat((x4,d5),dim=1)
-        
-        d5 = self.Up_conv5(d5)
-        
-        d4 = self.Up4(d5)
-        d4 = torch.cat((x3,d4),dim=1)
-        d4 = self.Up_conv4(d4)
-
-        d3 = self.Up3(d4)
-        d3 = torch.cat((x2,d3),dim=1)
-        d3 = self.Up_conv3(d3)
-
-        d2 = self.Up2(d3)
-        d2 = torch.cat((x1,d2),dim=1)
-        d2 = self.Up_conv2(d2)
-
-        d1 = self.Conv_1x1(d2)
-
-        return d1
-
-
-class R2U_Net(nn.Module):
-    def __init__(self,img_ch=3,output_ch=1,t=2):
-        super(R2U_Net,self).__init__()
-        
-        self.Maxpool = nn.MaxPool2d(kernel_size=2,stride=2)
-        self.Upsample = nn.Upsample(scale_factor=2)
-
-        self.RRCNN1 = RRCNN_block(ch_in=img_ch,ch_out=64,t=t)
-
-        self.RRCNN2 = RRCNN_block(ch_in=64,ch_out=128,t=t)
-        
-        self.RRCNN3 = RRCNN_block(ch_in=128,ch_out=256,t=t)
-        
-        self.RRCNN4 = RRCNN_block(ch_in=256,ch_out=512,t=t)
-        
-        self.RRCNN5 = RRCNN_block(ch_in=512,ch_out=1024,t=t)
-        
-
-        self.Up5 = up_conv(ch_in=1024,ch_out=512)
-        self.Up_RRCNN5 = RRCNN_block(ch_in=1024, ch_out=512,t=t)
-        
-        self.Up4 = up_conv(ch_in=512,ch_out=256)
-        self.Up_RRCNN4 = RRCNN_block(ch_in=512, ch_out=256,t=t)
-        
-        self.Up3 = up_conv(ch_in=256,ch_out=128)
-        self.Up_RRCNN3 = RRCNN_block(ch_in=256, ch_out=128,t=t)
-        
-        self.Up2 = up_conv(ch_in=128,ch_out=64)
-        self.Up_RRCNN2 = RRCNN_block(ch_in=128, ch_out=64,t=t)
-
-        self.Conv_1x1 = nn.Conv2d(64,output_ch,kernel_size=1,stride=1,padding=0)
-
-
-    def forward(self,x):
-        # encoding path
-        x1 = self.RRCNN1(x)
-
-        x2 = self.Maxpool(x1)
-        x2 = self.RRCNN2(x2)
-        
-        x3 = self.Maxpool(x2)
-        x3 = self.RRCNN3(x3)
-
-        x4 = self.Maxpool(x3)
-        x4 = self.RRCNN4(x4)
-
-        x5 = self.Maxpool(x4)
-        x5 = self.RRCNN5(x5)
-
-        # decoding + concat path
-        d5 = self.Up5(x5)
-        d5 = torch.cat((x4,d5),dim=1)
-        d5 = self.Up_RRCNN5(d5)
-        
-        d4 = self.Up4(d5)
-        d4 = torch.cat((x3,d4),dim=1)
-        d4 = self.Up_RRCNN4(d4)
-
-        d3 = self.Up3(d4)
-        d3 = torch.cat((x2,d3),dim=1)
-        d3 = self.Up_RRCNN3(d3)
-
-        d2 = self.Up2(d3)
-        d2 = torch.cat((x1,d2),dim=1)
-        d2 = self.Up_RRCNN2(d2)
-
-        d1 = self.Conv_1x1(d2)
-
-        return d1
 
 
 
