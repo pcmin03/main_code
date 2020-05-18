@@ -626,7 +626,17 @@ def get_model_instance_segmentation(num_classes=2):
     # replace the pre-trained head with a new one
     model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
     return model
+class reconstruction_discrim(nn.Module):
+    def __init__(self,in_channels=1,classes=1,multi_output=False):
+        super(reconstruction_discrim,self).__init__()
+        self.model = smp.Unet('resnet34',in_channels=in_channels,classes=classes,activation='softmax',encoder_weights=None)
+        
 
+    def forward(self,x):
+        result = self.model.encoder.forward(x)
+        final=result[len(result)-1]
+        final = final.view(1,-1)
+        return final
 
 #=====================================================================#
 #==============================U-network==============================#

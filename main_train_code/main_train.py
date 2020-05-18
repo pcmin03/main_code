@@ -20,13 +20,22 @@ from mydataset import prjection_mydataset,mydataset_2d
 from logger import Logger
 from metrics import *
 import argparse
+import torch.autograd as autograd
 
 parser = argparse.ArgumentParser(description='Process some integers.')
 parser.add_argument('--knum', help='Select Dataset')
 parser.add_argument('--gpu', help='comma separated list of GPU(s) to use.')
 parser.add_argument('--weight_decay',default=0.001,help='set weight_decay',type=float)
 parser.add_argument('--weight',help='set Adaptive weight',type=float)
-# parser.add_argument('--batch',defalut=110,help='set Adaptive weight',type=int)
+parser.add_argument('--start_lr',default=1e-4, help='set of learning rate', type=float)
+parser.add_argument('--end_lr',default=1e-6,help='set fo end learning rate',type=float)
+parser.add_argument('--paralle',default=False,help='GPU paralle',type=bool)
+parser.add_argument('--scheduler',default='Cosine',help='select schduler method',type=str)
+parser.add_argument('--epochs',default=201,help='epochs',type=int)
+parser.add_argument('--out_class',default=4,help='set of output class',type=int)
+parser.add_argument('--changestep',default=20,help='change train to valid',type=int)
+parser.add_argument('--pretrain',default=True,help='load pretrained',type=bool)
+# parser.add_argument('--batch',defalut=110,help='set Adaptive weight',type=int)_
 args = parser.parse_args()
 
 
@@ -35,23 +44,22 @@ with open('my_config.yml') as f:
 
 
 num_workers = 8
-learning_rate = 1e-4
-end_rate = 1e-6
-paralle = False
-use_scheduler = 'Cosine'
-cross_validation = True
-epochs = 201
-best_epoch = 0
-best_axon = 0
-best_dend = 0
-betavalue = 2
-F1best = 0
-best_axon_recall = 0
-eval_channel = 4
+learning_rate = args.start_lr
+end_rate = args.end_lr
+paralle = args.paralle
+use_scheduler = args.scheduler
+epochs = args.epochs
+eval_channel = args.out_class
+classnum = args.out_class
 knum = args.knum
+weight_decay = args.weight_decay
+changestep = args.changestep
+#set evluaution 
+best_epoch, best_axon, best_dend, best_axon_recall, F1best = 0,0,0,0,0
+
 print(knum,'=============')
 foldnum = 10
-classnum = 4
+betavalue = 2
 phase = 'train'
 model = 'unet'
 
@@ -59,7 +67,7 @@ model = 'unet'
 # name = "Adaptive_Full_image_RMSE"
 # name = "Adpative_attention_module"+str(args.weight)
 # name = "original"
-# name = "Adaptive_Full_image_AdaptiveCE_"+str(args.weight)
+# name = "Adaptive_Full_image_AdaptiveCE_"+str(int(args.weight))
 # name = "Adaptive_Full_image_class_AdaptiveCE_v2"+str(args.weight)
 name = "Adaptive_Full_image_gaussian_AdaptiveCE_V2"+str(args.weight)
 # name = "Adaptive_Full_image_class_AdaptiveCE_"+str(args.weight)
@@ -74,26 +82,32 @@ name = "Adaptive_Full_image_gaussian_AdaptiveCE_V2"+str(args.weight)
 # name = "Adaptive_CE"+str(args.weight)
 
 # unetmodel2Adaptive_loss_weight_decay0.001
-# os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
-# print(args.weight,'11111111')
-changestep = 20
-worst = 10
-# weight = args.weight_decay
+
 # path = '../nested_CV_nest_net_loss'+str(knum)+'/'
+
+load_pretrain = args.pretrain
 deepsupervision = True
 trainning = True
 testing = True
-use_postprocessing = True
+discrim = True
 deleteall = False
-load_pretrain = False
-patchwise = False
-multi = False
+patchwise = True
+multichannel = False
 multi_ = False
+
 #set data path 
+cross_validation = True
+
 imageDir= '../new_project_original_image/'
 labelDir = '../new_project_label_modify_image/'
 
-path = '../'+str(model)+'model'+str(knum)+str(name)+'/'
+modelsave_dir = '../'+str(model)+'model'
+if not os.path.exists(modelsave_dir):
+    print('----- Make_save_Dir-------------')
+    os.makedirs(modelsave_dir)
+    print(modelsave_dir)
+
+path = modelsave_dir+'/'+str(model)+'model'+str(knum)+str(name)+'/'
 #set devices
 device = torch.device('cuda:'+str(args.gpu)if torch.cuda.is_available() else "else")
 
@@ -129,38 +143,10 @@ elif model == 'DANET':
     batch_size = 35
     gen = DANet().to(device)
 
-# path = '../'+str(model)+'model'+str(knum)+str(name)+str(weight)+'/'
-
-# path  = '../res_unet_loss_single_nested_CV_unet'+str(knum)+'/'
-# path = '../nest_unetnew_model3/'
-# path = '../nest_unetmodel4/'
-# path = '../res_unetmode'
-
-# path = '../nested_CV_nest_net_loss'+str(knum)+'/'
-
-# path = '../pre_result_unet_loss_single2_summary_model_crf/'
-# path = '../res_unetfull_model3_new/'
-# path = '../pre_result_unet_loss_single2_summary_model_NestedUNet/'
-
-# path ='../nest_unetfull_model3_new/'
-
-
-
-# if model == 'res_unet':
-#     batch_size = 5
-   
-
-# if cross_validation == False:
-#     # Dataloader
-#     MyDataset = {'train': DataLoader(prjection_mydataset(imageDir,labelDir,True,cross_validation),
-#                                     batch_size, 
-#                                     shuffle = True,
-#                                     num_workers = num_workers),
-#                 'test' : DataLoader(prjection_mydataset(testDir,tlabelDir,False,cross_validation),
-#                                     1, 
-#                                     shuffle = True,
-#                                     num_workers = num_workers)}
-
+if load_pretrain == True:
+    # if os.path.exists(path+"lastsave_models{}.pth"):
+    checkpoint = torch.load(path +"lastsave_models{}.pth")
+    gen.load_state_dict(checkpoint['gen_model'])
 
 #set paralle
 
@@ -168,25 +154,50 @@ elif model == 'DANET':
 if paralle == True:
     gen = torch.nn.DataParallel(gen, device_ids=[0,1])
 
-
-
-optimizerG = optim.Adam(gen.parameters(),lr=learning_rate)
-
-if use_scheduler == 'Cosine':
-    scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizerG,100,T_mult=1,eta_min=end_rate)
-
 if deleteall==True:
     logger = Logger(path,batch_size=batch_size,delete=deleteall,num=str(knum),name=model+name)
 
 else:
     logger = Logger(path,batch_size=batch_size,delete=False,num=str(knum),name=model+name)
     #training
-    
 
+optimizerG = optim.Adam(gen.parameters(),lr=learning_rate)
 
+if use_scheduler == 'Cosine':
+    scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizerG,100,T_mult=1,eta_min=end_rate)
 
+if discrim == True:
+    batch_size = 50
+    logger.changedir('adversarial')
+    dis = reconstruction_discrim().to(device)
+    criterion1 = CrossEntropyLoss2d().to(device)
+    optimizerD = optim.Adam(dis.parameters(),lr=learning_rate)
+    schdulerD = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizerD,100,T_mult=1,eta_min=end_rate)
+
+def compute_gradient_penalty(D, real_samples, fake_samples):
+    cuda = True if torch.cuda.is_available() else False
+    Tensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
+    """Calculates the gradient penalty loss for WGAN GP"""
+    # Random weight term for interpolation between real and fake samples
+    alpha = Tensor(np.random.random((real_samples.size(0), 1, 1, 1))).expand_as(real_samples)
+    # Get random interpolation between real and fake samples
+    interpolates = (alpha * real_samples + ((1 - alpha) * fake_samples)).requires_grad_(True)
+    d_interpolates = D(interpolates)
+    fake = Variable(Tensor(d_interpolates.size()).fill_(1.0), requires_grad=False)
+    # Get gradient w.r.t. interpolates
+    gradients = autograd.grad(
+        outputs=d_interpolates,
+        inputs=interpolates,
+        grad_outputs=fake,
+        create_graph=True,
+        retain_graph=True,
+        only_inputs=True,
+    )[0]
+    gradients = gradients.view(gradients.size(0), -1)
+    gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
+    return gradient_penalty
 #set loss
-criterion = Custom_Adaptive_Gaussian_DistanceMap(args.weight,distanace_map=False).to(device)
+criterion = Custom_Adaptive_DistanceMap(int(args.weight),distanace_map=False).to(device)
 
 print(1/(1+int(args.weight)),'1111')
 
@@ -196,7 +207,6 @@ inversevaluator = Evaluator(eval_channel)
 
 vevaluator = Evaluator(eval_channel)
 inversvevaluator = Evaluator(eval_channel)
-
 
 
 image,labels = divide_kfold(imageDir,labelDir,k=foldnum,name='test')
@@ -214,11 +224,11 @@ if trainning == True:
     if cross_validation == True:
         print(f"{image_valid},{label_valid}")
         print(f"{image[train_num]},{labels[train_num]}")
-        MyDataset = {'train': DataLoader(mydataset_2d(image_train,label_train,patchwise=patchwise,multi=multi),
+        MyDataset = {'train': DataLoader(mydataset_2d(image_train,label_train,patchwise=patchwise,multichannel=multichannel),
                                         batch_size, 
                                         shuffle = True,
                                         num_workers = num_workers),
-                    'valid' : DataLoader(mydataset_2d(image_valid,label_valid,False,patchwise=patchwise,phase='test',multi=multi),
+                    'valid' : DataLoader(mydataset_2d(image_valid,label_valid,False,patchwise=patchwise,phase='test',multichannel=multichannel),
                                         1, 
                                         shuffle = False,
                                         num_workers = num_workers)}
@@ -247,6 +257,9 @@ if trainning == True:
             gen.train()  
             evaluator.reset()
             inversevaluator.reset()
+            if discrim == True:
+                dis.train()
+
         print(f"{epoch}/{epochs}epochs,IR=>{get_lr(optimizerG)},best_epoch=>{best_epoch},phase=>{phase}")
         print(f"==>{path}<==")
         for i, batch in enumerate(tqdm.tqdm(MyDataset[phase])):
@@ -258,6 +271,7 @@ if trainning == True:
                 torch.autograd.set_detect_anomaly(True)
 
                 if deepsupervision==True and model == 'nest_unet':   
+                    
                     loss = 0
                     back,body,dend,axon = gen(_input)
 
@@ -286,8 +300,11 @@ if trainning == True:
                     Class_precision, Class_recall,Class_F1score = evaluator.Class_F1_score()
                     _, _,Class_Fbetascore = evaluator.Class_Fbeta_score(beta=betavalue)                    
                         
+                    #
                 else :
+                    ##### train with source code #####
                     predict=gen(_input)
+                    
                     if classnum == 8:
                         CE_loss = criterion(predict,_label)
                         inversevaluator.add_batch(_label.cpu().numpy(),torch.argmax(predict[:,5:8],dim=1).cpu().numpy())
@@ -300,6 +317,7 @@ if trainning == True:
                         optimizerG.step()
                     
                     else:
+
                         if model == 'DANET':
                             CE_loss1 = criterion(predict[0],_label)
                             CE_loss2 = criterion(predict[1],_label)
@@ -310,15 +328,34 @@ if trainning == True:
                             CE_loss = criterion(predict,_label)
                         # dice_loss = criterion_v2(predict,_label)
                         
+                        if discrim == True:
+                            optimizerD.zero_grad()
+                            
+                            real_val = dis(torch.argmax(predict,dim=1).unsqueeze(1).float())
+                            fake_val = dis(_label.unsqueeze(1).float())
+
+                            #gradient penalty & WGAN adversarial loss
+                            
+                            GP = compute_gradient_penalty(dis, _label.unsqueeze(1).float(), torch.argmax(predict,dim=1).unsqueeze(1).float())
+                            d_loss = -torch.mean(real_val) + torch.mean(fake_val) + 10 * GP
+
+                            d_loss.backward(retain_graph = True)
+                            optimizerD.step()
+
+                            #add adversarial loss to generative(segmentation network)
+                            # cross_entropy2d = criterion1(real_val.float(),fake_val.long())
+                            g_loss = -torch.mean(fake_val)
+                            CE_loss += g_loss  
+                             
                         seg_loss_body = CE_loss 
                         seg_loss_body.backward(retain_graph = True)
                         optimizerG.step()
-                    
+
                         evaluator.add_batch(_label.cpu().numpy(),torch.argmax(predict,dim=1).cpu().numpy())
                         IOU,Class_IOU,wo_back_MIoU = evaluator.Mean_Intersection_over_Union()
                         Class_precision, Class_recall,Class_F1score = evaluator.Class_F1_score()
                         _, _,Class_Fbetascore = evaluator.Class_Fbeta_score(beta=betavalue)                    
-                        
+
             
             else:
                 pre_IOU = 0
@@ -450,9 +487,13 @@ if trainning == True:
                                 'recall':Class_recall,
                                 'F1score':Class_F1score,
                                 'Fbetascore':Class_Fbetascore}
+                if discrim == True:
+                    summary_print.update({'gan_g_loss':g_loss,'gan_d_loss':d_loss})
+
                 logger.print_value(summary_print,'train')
             train_loss = {  'seg_loss_body':seg_loss_body,
                             'CE_loss':CE_loss}
+            train_loss.update({'gan_g_loss':g_loss,'gan_d_loss':d_loss})
             logger.summary_scalars(train_loss,epoch)
             
 
@@ -520,7 +561,7 @@ if trainning == True:
             
 
             if  (Class_IOU[3] > best_axon) or (Class_F1score[3] > best_axon_recall) :
-                torch.save({"gen_model":gen.state_dict(),
+                torch.save({"gen_adv_model":gen.state_dict(),
                         "optimizerG":optimizerG.state_dict(),
                         "epochs":epoch},
                         path+"bestsave_models{}.pth")
@@ -532,7 +573,7 @@ if trainning == True:
 
                         
             if  epoch %changestep == 0:
-                torch.save({"gen_model":gen.state_dict(),
+                torch.save({"gen_adv_model":gen.state_dict(),
                         "optimizerG":optimizerG.state_dict(),
                         "epochs":epoch},
                         path+"lastsave_models{}.pth")
@@ -575,10 +616,7 @@ if trainning == True:
 
 
                 logger.save_images(save_stack_images,epoch)
-if load_pretrain == True:
-    # if os.path.exists(path+"lastsave_models{}.pth"):
-    checkpoint = torch.load(path +"lastsave_models{}.pth")
-    gen.load_state_dict(checkpoint['gen_model'])
+
 
 if testing == True:
     #testing
@@ -595,16 +633,16 @@ if testing == True:
     total_recall = []
     total_predict = []
 
-    MyDataset = {'valid' :   DataLoader(mydataset_2d(image_valid,label_valid,False,patchwise=patchwise,phase='test',multi=multi),
+    MyDataset = {'valid' :   DataLoader(mydataset_2d(image_valid,label_valid,False,patchwise=patchwise,phase='test',multichannel=multichannel),
                             1, 
                             shuffle = False,
                             num_workers = num_workers),
-                'test' :   DataLoader(mydataset_2d(testDir,tlabelDir,False,patchwise=patchwise,phase='test',multi=multi, isDir=False),
+                'test' :   DataLoader(mydataset_2d(testDir,tlabelDir,False,patchwise=patchwise,phase='test',multichannel=multichannel, isDir=False),
                             1, 
                             shuffle = False,
                             num_workers = num_workers)}
-    phase = 'valid'
-    logger.changedir()
+    phase = 'test'
+    logger.changedir('test_result')
     
     for i, batch in enumerate(MyDataset[phase]):
         _input, _label = batch[0].to(device), batch[1].to(device)

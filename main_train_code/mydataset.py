@@ -68,30 +68,23 @@ class mydataset_3d(Dataset):
             gray_label[mask3] = 3
             stack_label.append(gray_label)
         labels=np.array(stack_label).astype('uint8')
-        
-        # clip = torch.Tensor([self.L_transform(img) for img in image])
-        # image = skimage.color.rgb2gray(image[:25])
+
         
         if self.state==True:
             image,labels = self.Flip(m = image,n = labels)
             image,labels = self.Rotate90(m = image,n = labels)
 
-        # print(np.expand_dims(image,axis=3).shape)
-        # imsave('test2'+str(index)+'.tif',np.expand_dims(image,axis=3))
-        # print(image.shape)
+
         clip = self.L_transform(image).permute(1,0,2,3)
-        # print(clip.shape,'111')
-        # im = np.transpose(clip.cpu().numpy(),[1,2,3,0])
-        # imsave('test'+str(index)+'.tif',np.expand_dims(labels,axis=3))
-        # imsave('test2_'+str(index)+'.tif',im)
+
         
         
         return clip,labels
 
 class mydataset_2d(Dataset):
-    def __init__(self,imageDir,labelDir,usetranform=True,patchwise=True,threshold=0.1,phase='train',multi=False,isDir=True):
+    def __init__(self,imageDir,labelDir,usetranform=True,patchwise=True,threshold=0.1,phase='train',multichannel=False,isDir=True):
         
-        self.multi = multi
+        self.multichannel = multichannel
         self.isDir = isDir
         if isDir == True:
             self.imageDir = imageDir
@@ -246,7 +239,7 @@ class mydataset_2d(Dataset):
 
         clip = self.L_transform(image)
         label = np.array(label)
-        if self.multi == True:
+        if self.multichannel == True:
             back_lable = np.where(label==0,np.ones_like(label),np.zeros_like(label))
             body_lable = np.where(label==1,np.ones_like(label),np.zeros_like(label))
             dend_lable = np.where(label==2,np.ones_like(label),np.zeros_like(label))

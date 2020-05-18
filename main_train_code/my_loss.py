@@ -210,49 +210,6 @@ class Custom_Adaptive_DistanceMap(torch.nn.Module):
         MSE = net_output - new_gt
         RMSE = torch.mul(MSE,MSE).float()
         
-        return torch.mean((back_one*RMSE + back_zero*RMSE).float())
-        # elif stage == 'inverse':
-        #     back_gt = torch.where(gt==0,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
-        #     body_gt = torch.where(gt==1,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
-        #     dend_gt = torch.where(gt==2,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1) 
-        #     axon_gt = torch.where(gt==3,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
-
-        #     inv_back_gt = torch.where(gt==0,torch.zeros_like(gt),torch.ones_like(gt)).unsqueeze(1)
-        #     inv_body_gt = torch.where(gt==1,torch.zeros_like(gt),torch.ones_like(gt)).unsqueeze(1)
-        #     inv_dend_gt = torch.where(gt==2,torch.zeros_like(gt),torch.ones_like(gt)).unsqueeze(1) 
-        #     inv_axon_gt = torch.where(gt==3,torch.zeros_like(gt),torch.ones_like(gt)).unsqueeze(1)
-            
-            
-            
-        #     # print(back_gt.shape,body_gt.shape,dend_gt.shape,axon_gt.shape)
-        #     new_gt = torch.cat((back_gt, body_gt,dend_gt,axon_gt,
-        #                         inv_back_gt,inv_body_gt , inv_dend_gt,inv_axon_gt),dim=1).cuda().float()
-        #     # print(new_gt.shape,net_output.shape,'111')
-        #     po_gt = new_gt[:,0:4]
-        #     ne_gt = new_gt[:,4:8]
-
-        #     po_output = net_output[:,0:4]
-        #     ne_output = net_output[:,4:8]
-        #     #positive MSE             
-        #     back_po_output = po_output[:,0:1]
-        #     back_po_gt = po_gt[:,0:1]
-
-        #     po_MSE = po_output - po_gt
-        #     po_RMSE = torch.mul(po_MSE,po_MSE).float()
-            
-        #     #negative MSE
-        #     back_ne_output = ne_output[:,0:1]
-        #     back_ne_gt = ne_gt[:,0:1]
-        
-        #     ne_MSE = ne_output - ne_gt
-        #     ne_RMSE = torch.mul(ne_MSE,ne_MSE).float()
-            
-        #     ne_back_zero = back_ne_gt.float() * ne_RMSE   
-
-        #     po_back_one= back_po_gt/(1+int(weight)*(torch.abs(back_po_output - back_po_gt))).float()
-        #     po_back_zero = (1-back_po_gt).float() * po_RMSE
-        #     return torch.mean(ne_back_zero) + torch.mean(po_back_zero)
-        #distance Map (weight dendrite, axon)
         if self.dis_map == True:
             # zeros = torch.zeros_like(gt).unsqueeze(1)
             # ones = torch.ones_like(gt).unsqueeze(1)
@@ -372,7 +329,17 @@ class Custom_Adaptive_Gaussian_DistanceMap(torch.nn.Module):
 
         # adpative_loss[:,2:3] = adpative_loss[:,2:3]*((dend_gt.float() + 0.01) * 100)
         # adpative_loss[:,3:4] = adpative_loss[:,3:4]*((axon_gt.float() + 0.01) * 100)
-        
+def loss_calc(pred, label, gpu):
+    """
+    This function returns cross entropy loss for semantic segmentation
+    """
+    # out shape batch_size x channels x h x w -> batch_size x channels x h x w
+    # label shape h x w x 1 x batch_size  -> batch_size x 1 x h x w
+    label = Variable(label.long()).cuda(gpu)
+    criterion = CrossEntropy2d().cuda(gpu)
+
+    return criterion(pred, label)
+
         
 class Custom_Adaptive_CE_RMSE(torch.nn.Module):
     def forward(self, net_output, gt,weight=10,stage='forward'):
@@ -413,6 +380,13 @@ class Custom_Adaptive_CE_RMSE(torch.nn.Module):
             out[i] = logs[i][targets[i]]
         return -out.sum()/len(out)
 
+class CrossEntropyLoss2d(nn.Module):
+    def __init__(self, weight=None, size_average=True):
+        super(CrossEntropyLoss2d, self).__init__()
+        self.nll_loss = nn.NLLLoss2d(weight, size_average)
+
+    def forward(self, inputs, targets):
+        return self.nll_loss(F.log_softmax(inputs), targets)
 
 class Custom_Adaptive(torch.nn.Module):
     def forward(self, net_output, gt,Lambda=10):
