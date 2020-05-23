@@ -70,6 +70,8 @@ model = 'unet'
 # name = "Adaptive_Full_image_AdaptiveCE_"+str(int(args.weight))
 # name = "Adaptive_Full_image_class_AdaptiveCE_v2"+str(args.weight)
 name = "Adaptive_Full_image_gaussian_AdaptiveCE_V2"+str(args.weight)
+
+# name = "remove_background_Adaptive_Full_image_gaussian_AdaptiveCE_V2"+str(args.weight)
 # name = "Adaptive_Full_image_class_AdaptiveCE_"+str(args.weight)
 # name = "Adaptive_Full_image_AdaptiveCE_distacemap"+str(args.weight)
 
@@ -87,11 +89,11 @@ name = "Adaptive_Full_image_gaussian_AdaptiveCE_V2"+str(args.weight)
 
 load_pretrain = args.pretrain
 deepsupervision = True
-trainning = True
+trainning = False
 testing = True
-discrim = True
+discrim = False
 deleteall = False
-patchwise = True
+patchwise = False
 multichannel = False
 multi_ = False
 
@@ -143,10 +145,7 @@ elif model == 'DANET':
     batch_size = 35
     gen = DANet().to(device)
 
-if load_pretrain == True:
-    # if os.path.exists(path+"lastsave_models{}.pth"):
-    checkpoint = torch.load(path +"lastsave_models{}.pth")
-    gen.load_state_dict(checkpoint['gen_model'])
+
 
 #set paralle
 
@@ -169,8 +168,8 @@ if use_scheduler == 'Cosine':
 if discrim == True:
     batch_size = 50
     logger.changedir('adversarial')
-    dis = reconstruction_discrim().to(device)
-    criterion1 = CrossEntropyLoss2d().to(device)
+    dis = classification_model().to(device)
+    criterion1 =torch.nn.L1Loss().to(device)
     optimizerD = optim.Adam(dis.parameters(),lr=learning_rate)
     schdulerD = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizerD,100,T_mult=1,eta_min=end_rate)
 
@@ -183,7 +182,7 @@ def compute_gradient_penalty(D, real_samples, fake_samples):
     # Get random interpolation between real and fake samples
     interpolates = (alpha * real_samples + ((1 - alpha) * fake_samples)).requires_grad_(True)
     d_interpolates = D(interpolates)
-    fake = Variable(Tensor(d_interpolates.size()).fill_(1.0), requires_grad=False)
+    fake = Variable(Tensor(real_samples.shape[0],1).fill_(1.0), requires_grad=False)
     # Get gradient w.r.t. interpolates
     gradients = autograd.grad(
         outputs=d_interpolates,
@@ -220,7 +219,11 @@ image_valid = image[test_num]
 label_valid = labels[test_num]
 
 if trainning == True:
-
+    if load_pretrain == True:
+        # if os.path.exists(path+"lastsave_models{}.pth"):
+        checkpoint = torch.load(path +"lastsave_models{}.pth")
+        gen.load_state_dict(checkpoint['gen_model'])
+        
     if cross_validation == True:
         print(f"{image_valid},{label_valid}")
         print(f"{image[train_num]},{labels[train_num]}")
@@ -343,9 +346,9 @@ if trainning == True:
                             optimizerD.step()
 
                             #add adversarial loss to generative(segmentation network)
-                            # cross_entropy2d = criterion1(real_val.float(),fake_val.long())
+                            other_loss = criterion1(real_val,fake_val)
                             g_loss = -torch.mean(fake_val)
-                            CE_loss += g_loss  
+                            CE_loss += g_loss  +other_loss
                              
                         seg_loss_body = CE_loss 
                         seg_loss_body.backward(retain_graph = True)
@@ -443,7 +446,9 @@ if trainning == True:
                                 # val_dice_loss = criterion_v2(predict,_label)
                         
                             val_loss = val_CE_loss  
-                            vevaluator.add_batch(_label.cpu().numpy(),torch.argmax(predict[:,0:4],dim=1).cpu().numpy())
+                            # EROSION
+                            predict = EROSION(torch.argmax(predict,dim=1).cpu().numpy())
+                            vevaluator.add_batch(_label.cpu().numpy(),predict)
                             IOU,Class_IOU,wo_back_MIoU = vevaluator.Mean_Intersection_over_Union()
                             Acc_class,Class_ACC,wo_back_ACC = vevaluator.Pixel_Accuracy_Class()
                             Class_precision, Class_recall,Class_F1score = vevaluator.Class_F1_score()
@@ -493,7 +498,8 @@ if trainning == True:
                 logger.print_value(summary_print,'train')
             train_loss = {  'seg_loss_body':seg_loss_body,
                             'CE_loss':CE_loss}
-            train_loss.update({'gan_g_loss':g_loss,'gan_d_loss':d_loss})
+            if discrim == True:
+                train_loss.update({'gan_g_loss':g_loss,'gan_d_loss':d_loss})
             logger.summary_scalars(train_loss,epoch)
             
 
@@ -561,7 +567,7 @@ if trainning == True:
             
 
             if  (Class_IOU[3] > best_axon) or (Class_F1score[3] > best_axon_recall) :
-                torch.save({"gen_adv_model":gen.state_dict(),
+                torch.save({"gen_model":gen.state_dict(),
                         "optimizerG":optimizerG.state_dict(),
                         "epochs":epoch},
                         path+"bestsave_models{}.pth")
@@ -573,7 +579,7 @@ if trainning == True:
 
                         
             if  epoch %changestep == 0:
-                torch.save({"gen_adv_model":gen.state_dict(),
+                torch.save({"gen_model":gen.state_dict(),
                         "optimizerG":optimizerG.state_dict(),
                         "epochs":epoch},
                         path+"lastsave_models{}.pth")
@@ -596,7 +602,8 @@ if trainning == True:
                     save_stack_images = {'pre_1':pre_body1,'pre_2':pre_body2,'pre_3':pre_body3,'v_la':v_la,'_input':_input}
                     
                 else:
-                    pre_body=decode_segmap(torch.argmax(predict[:,0:4],dim=1).cpu().numpy())
+                    
+                    pre_body=decode_segmap(predict)
                     save_stack_images = {'pre_body':pre_body,'v_la':v_la,'_input':_input}
                     # inversepre_body=decode_segmap(torch.argmax(predict[:,4:8],dim=1).cpu().numpy(),name='inverse')
 
@@ -616,6 +623,11 @@ if trainning == True:
 
 
                 logger.save_images(save_stack_images,epoch)
+
+if load_pretrain == True:
+    # if os.path.exists(path+"lastsave_models{}.pth"):
+    checkpoint = torch.load(path +"lastsave_models{}.pth")
+    gen.load_state_dict(checkpoint['gen_model'])
 
 
 if testing == True:
@@ -663,11 +675,14 @@ if testing == True:
             print(path)
             # predict = channel_segmap(predict.cpu().numpy())
             # vevaluator.add_batch(_label.cpu().numpy(),predict)
-            vevaluator.add_batch(_label.cpu().numpy(),torch.argmax(predict,dim=1).cpu().numpy())
+            predict = EROSION(torch.argmax(predict,dim=1).cpu().numpy())
+            vevaluator.add_batch(_label.cpu().numpy(),predict)
             IOU,Class_IOU,wo_back_MIoU = vevaluator.Mean_Intersection_over_Union()
             Acc_class,Class_ACC,wo_back_ACC = vevaluator.Pixel_Accuracy_Class()
             Class_precision, Class_recall,Class_F1score = vevaluator.Class_F1_score()
             _, _,Class_Fbetascore = vevaluator.Class_Fbeta_score(beta=betavalue)
+
+            
 
             # result_crf=np.array(decode_segmap(result_crf,name='full'))
             if model == 'DANET':
@@ -676,7 +691,8 @@ if testing == True:
                 pre_body3=decode_segmap(torch.argmax(DAnetpredict[2][:,0:4],dim=1).cpu().numpy())
                     
             else:
-                pre_body=decode_segmap(ch_channel(predict),nc=4,name='full')
+                pre_body=decode_segmap(predict.astype('uint8'),nc=4,name='full')
+                # pre_body=decode_segmap(ch_channel(predict),nc=4,name='full')
             # pre_body=decode_segmap(ch_channel(predict),nc=4,name='full')
             v_la=decode_segmap(_label.cpu().detach().numpy().astype('uint8'),nc=4,name='full')
             _input = _input.detach().cpu().numpy()

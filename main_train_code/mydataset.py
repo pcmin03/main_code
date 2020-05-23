@@ -16,6 +16,8 @@ from skimage.util.shape import view_as_blocks
 import cv2
 import custom_transform as tr
 
+# set image smoothing
+from scipy.ndimage import gaussian_filter
 class mydataset_3d(Dataset):
     def __init__(self,imageDir,labelDir,size,state=False):
         img = glob.glob(imageDir +'*')
@@ -91,13 +93,22 @@ class mydataset_2d(Dataset):
             self.labelDir = labelDir
             images = []
             labels = []          
+            gaussian_filter
+
             print(f"=====making dataset======")
             for i in range(len(self.imageDir)):
+                
                 
                 img = skimage.io.imread(self.imageDir[i])
                 lab = skimage.io.imread(self.labelDir[i])
                 lab = skimage.color.rgb2gray(lab)
                 
+                #set hard constraiant 
+                img = gaussian_filter(img, sigma=1)
+                img_threshold = skimage.filters.threshold_yen(img)
+
+                img = (img > img_threshold) * img
+
                 normalizedImg = np.zeros((1024, 1024))
                 img = cv2.normalize(img,  normalizedImg, 0, 255, cv2.NORM_MINMAX)
                 img = img.astype('uint8')
@@ -209,6 +220,10 @@ class mydataset_2d(Dataset):
             image = skimage.io.imread(image)
             label = skimage.io.imread(label)
             label = skimage.color.rgb2gray(label)
+            image = gaussian_filter(image, sigma=1)
+            img_threshold = skimage.filters.threshold_yen(image)
+            image = (image > img_threshold) * image
+
         image = np.array(image).astype('uint8')
         label = np.array(label)
         

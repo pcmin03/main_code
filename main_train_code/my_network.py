@@ -638,6 +638,13 @@ class reconstruction_discrim(nn.Module):
         final = final.view(1,-1)
         return final
 
+class classification_model(nn.Module):
+    def __init__(self,in_ch):
+        self.discrim = model.resnet34(pretrained=True)
+    
+    def forward(self,x):
+        result = self.discrim()
+
 #=====================================================================#
 #==============================U-network==============================#
 #=====================================================================#
@@ -875,9 +882,13 @@ class classification_model(nn.Module):
         super().__init__()
         self.first = nn.Conv2d(1,3,3,1,padding=1)
         self.classfier = models.resnet34(pretrained=True)
+        self.last = nn.Linear(1000, 1)
     def forward(self,x):
         x = self.first(x)
-        return self.classfier(x)
+        x = self.classfier(x)
+        x = self.last(x)
+        
+        return x
 # def compute_gradient_penalty(netD, real_data, fake_data):
     
 #     # print "real_data: ", real_data.size(), fake_data.size()

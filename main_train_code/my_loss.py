@@ -195,10 +195,10 @@ class Custom_Adaptive_DistanceMap(torch.nn.Module):
             body_gt = torch.where(gt==1,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
             dend_gt = torch.where(gt==2,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1) 
             axon_gt = torch.where(gt==3,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
-            net_output = net_output
-            back_output = net_output[:,0:1,:,:]
+        net_output = net_output
+        back_output = net_output[:,0:1,:,:]
 
-            new_gt = torch.cat((back_gt, body_gt,dend_gt,axon_gt),dim=1).cuda().float()
+        new_gt = torch.cat((back_gt, body_gt,dend_gt,axon_gt),dim=1).cuda().float()
 
         # L1 loss
         back_gt = back_gt.float()
@@ -210,23 +210,23 @@ class Custom_Adaptive_DistanceMap(torch.nn.Module):
         MSE = net_output - new_gt
         RMSE = torch.mul(MSE,MSE).float()
         
-        if self.dis_map == True:
-            # zeros = torch.zeros_like(gt).unsqueeze(1)
-            # ones = torch.ones_like(gt).unsqueeze(1)
-            # new_gt = torch.cat((ones, ones,ones,axon_gt*self.weight),dim=1).cuda().float()
-            # Lambda = np.array([ndimage.distance_transform_edt(i) for i in new_gt.cpu().numpy()])
-            # _,_,_,size = Lambda.shape
-            # normalizedImg = np.zeros((size, size))
-            # Lambda = torch.Tensor(cv2.normalize(Lambda,  normalizedImg, 1, self.weight, cv2.NORM_MINMAX)).cuda().float()
-            # RMSE * new_gt 
-            # print(new_gt.max())
-            # class_weight = ones * self.weight
-            RMSE[:,3] = RMSE[:,3] *self.weight
-            # Lambda = new_gt
-            return torch.mean((back_one*RMSE + back_zero*RMSE).float())
-        
-        else:        
-            return torch.mean((back_one*RMSE + back_zero*RMSE).float())
+        return torch.mean((back_one*RMSE + back_zero*RMSE).float())
+#     if self.dis_map == True:
+#     # zeros = torch.zeros_like(gt).unsqueeze(1)
+#     # ones = torch.ones_like(gt).unsqueeze(1)
+#     # new_gt = torch.cat((ones, ones,ones,axon_gt*self.weight),dim=1).cuda().float()
+#     # Lambda = np.array([ndimage.distance_transform_edt(i) for i in new_gt.cpu().numpy()])
+#     # _,_,_,size = Lambda.shape
+#     # normalizedImg = np.zeros((size, size))
+#     # Lambda = torch.Tensor(cv2.normalize(Lambda,  normalizedImg, 1, self.weight, cv2.NORM_MINMAX)).cuda().float()
+#     # RMSE * new_gt 
+#     # print(new_gt.max())
+#     # class_weight = ones * self.weight
+#     RMSE[:,3] = RMSE[:,3] *self.weight
+#     # Lambda = new_gt
+#     return torch.mean((back_one*RMSE + back_zero*RMSE).float())
+
+# else:     
 class Custom_Adaptive_class_DistanceMap(torch.nn.Module):
     
     def __init__(self,weight,distanace_map=False):
