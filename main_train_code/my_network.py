@@ -877,6 +877,99 @@ def pretrain_unet(classnum):
 def pretrain_efficent_unet():
     return smp.Unet('efficientnet-b3',in_channels=1,classes=4,activation='softmax')
 
+class pretrain_deeplab_unet(nn.Module):
+    def __init__(self,in_channels=1,classes=4,multi_output=False,plus = True):
+        super(pretrain_deeplab_unet,self).__init__()
+        if plus == True:
+            self.model = smp.DeepLabV3('resnet34',in_channels=in_channels,classes=classes,activation='softmax',encoder_weights=None)
+        elif plus == False:
+            self.model = smp.DeepLabV3Plus('resnet34',in_channels=in_channels,classes=classes,activation='softmax',encoder_weights=None)
+    def forward(self,x):
+        return self.model(x)
+
+class pretrain_pspnet(nn.Module):
+    def __init__(self,in_channels=1,classes=4,multi_output=False):
+        super(pretrain_pspnet,self).__init__()
+        self.model = smp.PSPNet('resnet101',in_channels=in_channels,classes=classes,activation='softmax')
+    def forward(self,x):
+        return self.model(x)
+
+class refinenet(nn.Module):
+    def __init__(self,in_channels=1,classes=4,multi_output=False):
+        super(refinenet,self).__init__()
+        self.model = smp.Unet('resnet34',in_channels=in_channels,classes=classes,activation='softmax',encoder_weights=None)
+        self.first    = single_conv(1,3) #1024
+        self.encoder0 = single_conv(3,64) #512
+        self.encoder1 = single_conv(64,64) #256
+        self.encoder2 = single_conv(64,128) #128
+        self.encoder3 = single_conv(128,256) #64
+        self.encoder4 = single_conv(256,512) #32
+
+
+        # self.model_0 = smp.Unet('resnet34',in_channels=64,classes=64,activation='softmax',encoder_weights=None)
+        self.model_1 = smp.Unet('resnet34',encoder_depth=4,in_channels=64,classes=64,activation='softmax',encoder_weights=None)
+        self.model_2 = smp.Unet('resnet34', encoder_depth=4,in_channels=128,classes=128,activation='softmax',encoder_weights=None)
+        self.model_3 = smp.Unet('resnet34', encoder_depth=4,in_channels=256,classes=256,activation='softmax',encoder_weights=None)
+        self.model_4 = smp.Unet('resnet34', encoder_depth=4,in_channels=512,classes=512,activation='softmax',encoder_weights=None)
+        
+        self.deconv5,self.deconv4,self.deconv3,self.deconv2,self.deconv1 = list(self.model.decoder.children())[1]
+        self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
+            
+        self.finals = nn.Conv2d(32, classes, kernel_size=3,padding=1)
+
+        self.softmax = nn.Softmax(dim=1)
+        # print(list(self.model.decoder.children())[1])
+    def pre_forward(self,x):
+        return self.model.encoder.forward(x)
+    
+    def pre_forwardv2(self,x):
+        e0 = self.first(x)
+        # print(e0.shape)
+        feautre_size = x.shape[0,:]
+        e1 = F.avg_pool2d(self.encoder0(e0),2)
+        e2 = F.avg_pool2d(self.encoder1(e1),2)
+        e3 = F.avg_pool2d(self.encoder2(e2),2)
+        e4 = F.avg_pool2d(self.encoder3(e3),2)
+        e5 = F.avg_pool2d(self.encoder4(e4),2)
+        print(e0.shape,e1.shape,e2.shape,e3.shape,e4.shape,e5.shape)
+        return [e0,e1,e2,e3,e4,e5]
+    
+    def forward(self,x):
+        encoder_list =self.pre_forward(x)
+        # print()
+        # orch.Size([1, 64, 256, 256]) torch.Size([1, 128, 128, 128]) torch.Size([1, 256, 64, 64]) torch.Size([1, 512, 32, 32])
+# torch.Size([1, 3, 128, 128]) torch.Size([1, 64, 64, 64]) torch.Size([1, 64, 32, 32]) torch.Size([1, 128, 16, 16]) torch.Size([1, 256, 8, 8]) torch.Size([1, 512, 4, 4])
+
+        print(encoder_list[1].shape,encoder_list[2].shape,encoder_list[3].shape,encoder_list[4].shape,encoder_list[5].shape)
+        print(len(encoder_list))
+        encoder_list[2] = self.model_1(encoder_list[2])
+        encoder_list[3] = self.model_2(encoder_list[3])
+        # encoder_list[4] = self.model_3(encoder_list[4])
+        # encoder_list[5] = self.model_4(encoder_list[5])
+
+        
+        print(encoder_list[1].shape,encoder_list[2].shape,encoder_list[3].shape,encoder_list[4].shape,encoder_list[5].shape)
+        # print(list(self.model.decoder.children())[1])
+        # print(encoder_list[5].shape)
+        result = torch.cat([encoder_list[4],self.upsample(encoder_list[5])],1)
+        result = self.deconv5(result) 
+        print(result.shape)
+        result = torch.cat([encoder_list[3],result],1)
+        result = self.deconv4(result) 
+        
+        
+        result = torch.cat([encoder_list[2],result],1)
+        result = self.deconv3(result)
+
+        result = torch.cat([encoder_list[1],result],1)
+        
+        result = self.deconv2(result)
+        result = self.finals(result)
+        
+        
+        
+        return result
+
 class classification_model(nn.Module):
     def __init__(self, n_classes=4):
         super().__init__()
@@ -889,32 +982,6 @@ class classification_model(nn.Module):
         x = self.last(x)
         
         return x
-# def compute_gradient_penalty(netD, real_data, fake_data):
-    
-#     # print "real_data: ", real_data.size(), fake_data.size()
-#     alpha = Variable(torch.rand(1),requires_grad=True)
-
-#     alpha = Tensor(np.random.random((real_data.size(0),1, 1, 1))).to(cuda0)
-
-#     # alpha = Variable(torch.rand(BATCH_SIZE,1,1,1),requires_grad=True)
-#     alpha = alpha.expand(real_data.size()).to(cuda0)
-#     # print(alpha.shape)
-#     interpolates = (alpha * real_data + (1 - alpha) * fake_data).requires_grad_(True)
-
-#     if cuda0:
-#         interpolates = interpolates.to(cuda0)
-#     interpolates = Variable(interpolates, requires_grad=True)
-
-#     disc_interpolates = netD(interpolates)
-
-#     gradients = torch.autograd.grad(outputs=disc_interpolates, inputs=interpolates,
-#                               grad_outputs=torch.ones(disc_interpolates.size()).to(cuda0),
-#                               create_graph=True, retain_graph=True, only_inputs=True)[0]
-#     # gradients = gradients.view(gradients.size(0), -1)
-
-#     gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
-#     return gradient_penalty
-# Tensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
 
 
 
@@ -1006,76 +1073,7 @@ class DANet(BaseNet):
         # outputs.append(x[1])
         # outputs.append(x[2])
         return [x[0],x[1],x[2]]
-# class DANet(nn.Module):
-#     DEPTH = 7
 
-#     def __init__(self, nclass,dilated=True, norm_layer=nn.BatchNorm2d):
-#         super(DANet, self).__init__()
-#         self.dilated = dilated
-#         self.head = DANetHead(1024, nclass, norm_layer)
-
-#         self.first = nn.Conv2d(1,3,3,1,padding=1)
-#         resnet = models.resnet.resnet101(pretrained=True)
-#         down_blocks = []
-#         up_blocks = []
-#         self.input_block = nn.Sequential(*list(resnet.children()))[:3]
-#         self.input_pool = list(resnet.children())[3]
-#         for bottleneck in list(resnet.children()):
-#             if isinstance(bottleneck, nn.Sequential):
-#                 down_blocks.append(bottleneck)
-#         self.down_blocks = nn.ModuleList(down_blocks)
-
-#     def base_forward(self, x):
-#         if self.dilated == True:
-#             imsize = x.size()[2:]
-#             _, _, c3, c4 = self.base_forward(x)
-
-#             x = self.head(c4)
-#             x = list(x)
-#             x[0] = upsample(x[0], imsize, **self._up_kwargs)
-#             x[1] = upsample(x[1], imsize, **self._up_kwargs)
-#             x[2] = upsample(x[2], imsize, **self._up_kwargs)
-
-#             outputs = [x[0]]
-#             outputs.append(x[1])
-#             outputs.append(x[2])
-#             return tuple(outputs)
-
-#         else : 
-#             x = self.first(x)
-#             pre_pools = dict()
-#             pre_pools[f"layer_0"] = x
-#             x = self.input_block(x)
-#             pre_pools[f"layer_1"] = x
-#             x = self.input_pool(x)
-
-#             for i, block in enumerate(self.down_blocks, 2):
-#                 x = block(x)
-#                 if i == (Segmentataion_resnet101unet.DEPTH - 1):
-#                     continue
-#                 # print(i)
-#                 # print(x.shape)
-#                 pre_pools[f"layer_{i}"] = x
-
-#             return pre_pools[f"layer_{3}"],pre_pools[f"layer_{4}"]
-
-#     def forward(self, x):
-#         imsize = x.size()[2:]
-#         c3, c4 = self.base_forward(x)
-#         print(c3.shape,c4.shape)
-#         # _, _, c3, c4 = pretrain_resnet
-
-#         x = self.head(c4)
-#         x = list(x)
-#         # print(x)
-#         x[0] = F.upsample(x[0], imsize, mode ='bilinear', align_corners =  True)
-#         x[1] = F.upsample(x[1], imsize, mode ='bilinear', align_corners =  True)
-#         x[2] = F.upsample(x[2], imsize, mode ='bilinear', align_corners =  True)
-#         # print(x[1].shape)
-#         outputs = [x[0]]
-#         outputs.append(x[1])
-#         outputs.append(x[2])
-#         return tuple(outputs)
         
 class DANetHead(nn.Module):
     def __init__(self, in_channels, out_channels, norm_layer):
@@ -1290,7 +1288,7 @@ class single_conv(nn.Module):
             nn.BatchNorm2d(ch_out),
             nn.ReLU(inplace=True)
         )
-
+    # 
     def forward(self,x):
         x = self.conv(x)
         return x

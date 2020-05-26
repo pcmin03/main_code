@@ -211,6 +211,30 @@ class Custom_Adaptive_DistanceMap(torch.nn.Module):
         RMSE = torch.mul(MSE,MSE).float()
         
         return torch.mean((back_one*RMSE + back_zero*RMSE).float())
+
+class ICNetLoss(nn.CrossEntropyLoss):
+    """Cross Entropy Loss for ICNet"""
+    
+    def __init__(self, aux_weight=0.4, ignore_index=-1):
+        super(ICNetLoss, self).__init__(ignore_index=ignore_index)
+        self.aux_weight = aux_weight
+
+    def forward(self, *inputs):
+        preds, target = tuple(inputs)
+        inputs = tuple(list(preds) + [target])
+
+        pred, pred_sub4, pred_sub8, pred_sub16, target = tuple(inputs)
+        # [batch, H, W] -> [batch, 1, H, W]
+        target = target.unsqueeze(1).float()
+        target_sub4 = F.interpolate(target, pred_sub4.size()[2:], mode='bilinear', align_corners=True).squeeze(1).long()
+        target_sub8 = F.interpolate(target, pred_sub8.size()[2:], mode='bilinear', align_corners=True).squeeze(1).long()
+        target_sub16 = F.interpolate(target, pred_sub16.size()[2:], mode='bilinear', align_corners=True).squeeze(
+            1).long()
+        loss1 = super(ICNetLoss, self).forward(pred_sub4, target_sub4)
+        loss2 = super(ICNetLoss, self).forward(pred_sub8, target_sub8)
+        loss3 = super(ICNetLoss, self).forward(pred_sub16, target_sub16)
+        #return dict(loss=loss1 + loss2 * self.aux_weight + loss3 * self.aux_weight)
+        return loss1 + loss2 * self.aux_weight + loss3 * self.aux_weight
 #     if self.dis_map == True:
 #     # zeros = torch.zeros_like(gt).unsqueeze(1)
 #     # ones = torch.ones_like(gt).unsqueeze(1)
@@ -282,17 +306,21 @@ class Custom_Adaptive_Gaussian_DistanceMap(torch.nn.Module):
         self.dis_map = distanace_map
 
 
-    def forward(self, net_output, gt,stage='forward'):
+    def forward(self, net_output, gt,stage='forward',upsample=False):
 
         # postive predict label
         # back_one= back_gt * self.gaussian(back_output,back_gt,float(self.weight)).float()
 
+        if upsample == True:
+            gt = F.interpolate(gt.unsqueeze(1), net_output.size()[2:], mode='bilinear', align_corners=True).long()
+        else : 
+            gt =gt.unsqueeze(1)
         # divide channel 
         if stage == 'forward':
-            back_gt = torch.where(gt==0,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
-            body_gt = torch.where(gt==1,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
-            dend_gt = torch.where(gt==2,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1) 
-            axon_gt = torch.where(gt==3,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
+            back_gt = torch.where(gt==0,torch.ones_like(gt),torch.zeros_like(gt))
+            body_gt = torch.where(gt==1,torch.ones_like(gt),torch.zeros_like(gt))
+            dend_gt = torch.where(gt==2,torch.ones_like(gt),torch.zeros_like(gt)) 
+            axon_gt = torch.where(gt==3,torch.ones_like(gt),torch.zeros_like(gt))
         
         back_output = net_output[:,0:1,:,:]
         #distance Map (weight dendrite, axon)

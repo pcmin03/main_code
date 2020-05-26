@@ -22,7 +22,9 @@ from metrics import *
 import argparse
 import torch.autograd as autograd
 
-parser = argparse.ArgumentParser(description='Process some integers.')
+ 
+from fusenet import ICNet 
+parser = argparse.ArgumentParser(description='Process some integers')
 parser.add_argument('--knum', help='Select Dataset')
 parser.add_argument('--gpu', help='comma separated list of GPU(s) to use.')
 parser.add_argument('--weight_decay',default=0.001,help='set weight_decay',type=float)
@@ -34,7 +36,7 @@ parser.add_argument('--scheduler',default='Cosine',help='select schduler method'
 parser.add_argument('--epochs',default=201,help='epochs',type=int)
 parser.add_argument('--out_class',default=4,help='set of output class',type=int)
 parser.add_argument('--changestep',default=20,help='change train to valid',type=int)
-parser.add_argument('--pretrain',default=True,help='load pretrained',type=bool)
+parser.add_argument('--pretrain',default=False,help='load pretrained',type=bool)
 # parser.add_argument('--batch',defalut=110,help='set Adaptive weight',type=int)_
 args = parser.parse_args()
 
@@ -61,7 +63,7 @@ print(knum,'=============')
 foldnum = 10
 betavalue = 2
 phase = 'train'
-model = 'unet'
+model = 'pspnet'
 
 # name = "Adaptive_Full_image_weight"+str(args.weight)
 # name = "Adaptive_Full_image_RMSE"
@@ -69,7 +71,8 @@ model = 'unet'
 # name = "original"
 # name = "Adaptive_Full_image_AdaptiveCE_"+str(int(args.weight))
 # name = "Adaptive_Full_image_class_AdaptiveCE_v2"+str(args.weight)
-name = "Adaptive_Full_image_gaussian_AdaptiveCE_V2"+str(args.weight)
+# name  =  "Adaptive_Full_image_gaussian_AdaptiveCE_V2"+str(args.weight)
+name  =  "Adaptive_Full_image_gaussian_AdaptiveCE_V2_uint16"+str(args.weight)
 
 # name = "remove_background_Adaptive_Full_image_gaussian_AdaptiveCE_V2"+str(args.weight)
 # name = "Adaptive_Full_image_class_AdaptiveCE_"+str(args.weight)
@@ -89,7 +92,7 @@ name = "Adaptive_Full_image_gaussian_AdaptiveCE_V2"+str(args.weight)
 
 load_pretrain = args.pretrain
 deepsupervision = True
-trainning = False
+trainning = True
 testing = True
 discrim = False
 deleteall = False
@@ -100,8 +103,14 @@ multi_ = False
 #set data path 
 cross_validation = True
 
-imageDir= '../new_project_original_image/'
-labelDir = '../new_project_label_modify_image/'
+# uint 8
+# imageDir= '../new_project_original_image/'
+# labelDir = '../new_project_label_modify_image/'
+
+#uint16
+imageDir= '../AIAR_orignal_data/train_project_image/'
+labelDir = '../AIAR_orignal_data/train_project_label/'
+
 
 modelsave_dir = '../'+str(model)+'model'
 if not os.path.exists(modelsave_dir):
@@ -120,6 +129,23 @@ if model =='unet':
 elif model=='res_unet':
     batch_size = 22
     gen = Segmentataion_resnet101unet().to(device)
+
+elif model=='deeplab':
+    batch_size = 120
+    gen = pretrain_deeplab_unet(plus = False).to(device)
+
+elif model=='deeplabplus':
+    batch_size = 100
+    gen = pretrain_deeplab_unet(plus = True).to(device)
+
+elif model=='pspnet':
+    batch_size = 130
+    gen = pretrain_pspnet().to(device)
+
+elif model=='multi_net':
+    batch_size = 150
+    gen = ICNet().to(device)
+
 
 elif model == 'efficent_unet':
     batch_size = 40
@@ -196,7 +222,7 @@ def compute_gradient_penalty(D, real_samples, fake_samples):
     gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
     return gradient_penalty
 #set loss
-criterion = Custom_Adaptive_DistanceMap(int(args.weight),distanace_map=False).to(device)
+criterion = Custom_Adaptive_Gaussian_DistanceMap(int(args.weight),distanace_map=False).to(device)
 
 print(1/(1+int(args.weight)),'1111')
 
@@ -227,11 +253,11 @@ if trainning == True:
     if cross_validation == True:
         print(f"{image_valid},{label_valid}")
         print(f"{image[train_num]},{labels[train_num]}")
-        MyDataset = {'train': DataLoader(mydataset_2d(image_train,label_train,patchwise=patchwise,multichannel=multichannel),
+        MyDataset = {'train': DataLoader(mydataset_2d(image_train,label_train,patchwise=patchwise,multichannel=multichannel,preprocessing=False),
                                         batch_size, 
                                         shuffle = True,
                                         num_workers = num_workers),
-                    'valid' : DataLoader(mydataset_2d(image_valid,label_valid,False,patchwise=patchwise,phase='test',multichannel=multichannel),
+                    'valid' : DataLoader(mydataset_2d(image_valid,label_valid,False,patchwise=patchwise,phase='test',multichannel=multichannel,preprocessing=False),
                                         1, 
                                         shuffle = False,
                                         num_workers = num_workers)}
@@ -276,8 +302,9 @@ if trainning == True:
                 if deepsupervision==True and model == 'nest_unet':   
                     
                     loss = 0
+                    
                     back,body,dend,axon = gen(_input)
-
+                    
                     gt=_label
                     # back_label = torch.where(gt==0,torch.ones_like(gt),torch.zeros_like(gt)).view(-1,).float()
                     # body_label = torch.where(gt==1,torch.ones_like(gt),torch.zeros_like(gt)).view(-1,).float()
@@ -307,7 +334,6 @@ if trainning == True:
                 else :
                     ##### train with source code #####
                     predict=gen(_input)
-                    
                     if classnum == 8:
                         CE_loss = criterion(predict,_label)
                         inversevaluator.add_batch(_label.cpu().numpy(),torch.argmax(predict[:,5:8],dim=1).cpu().numpy())
@@ -321,12 +347,13 @@ if trainning == True:
                     
                     else:
 
-                        if model == 'DANET':
+                        if model == 'DANET' or model == 'multi_net':
                             CE_loss1 = criterion(predict[0],_label)
-                            CE_loss2 = criterion(predict[1],_label)
-                            CE_loss3 = criterion(predict[2],_label)
-                            CE_loss = (CE_loss1 + CE_loss2 + CE_loss3)
-                            predict = predict[2]
+                            CE_loss2 = criterion(predict[1],_label,upsample=True)
+                            CE_loss3 = criterion(predict[2],_label,upsample=True)
+                            CE_loss4 = criterion(predict[3],_label,upsample=True)
+                            CE_loss = (CE_loss1 + CE_loss2 + CE_loss3 + CE_loss4)
+                            predict = predict[0]
                         else :
                             CE_loss = criterion(predict,_label)
                         # dice_loss = criterion_v2(predict,_label)
@@ -433,13 +460,14 @@ if trainning == True:
 
                             val_CE_loss = criterion(predict,_label)
                         else : 
-                            if model == 'DANET':
+                            if model == 'DANET' or model == 'multi_net':
                                 DAnetpredict = predict
                                 CE_loss1 = criterion(predict[0],_label)
-                                CE_loss2 = criterion(predict[1],_label)
-                                CE_loss3 = criterion(predict[2],_label)
-                                val_CE_loss = (CE_loss1 + CE_loss2 + CE_loss3)
-                                predict = predict[2]
+                                CE_loss2 = criterion(predict[1],_label,upsample=True)
+                                CE_loss3 = criterion(predict[2],_label,upsample=True)
+                                CE_loss4 = criterion(predict[3],_label,upsample=True)
+                                val_CE_loss = (CE_loss1 + CE_loss2 + CE_loss3 + CE_loss4)
+                                predict = predict[0]
                             # vevaluator.add_batch(_label.cpu().numpy(),predict)
                             else : 
                                 val_CE_loss = criterion(predict,_label)
@@ -447,7 +475,8 @@ if trainning == True:
                         
                             val_loss = val_CE_loss  
                             # EROSION
-                            predict = EROSION(torch.argmax(predict,dim=1).cpu().numpy())
+                            
+                            predict = torch.argmax(predict,dim=1).cpu().numpy()
                             vevaluator.add_batch(_label.cpu().numpy(),predict)
                             IOU,Class_IOU,wo_back_MIoU = vevaluator.Mean_Intersection_over_Union()
                             Acc_class,Class_ACC,wo_back_ACC = vevaluator.Pixel_Accuracy_Class()
@@ -592,19 +621,21 @@ if trainning == True:
                 #     v_la = decode_segmap(torch.argmax(_label,dim=1).cpu().detach().numpy(),name='full')
                 #     _input = _input.detach().cpu().numpy()
                 # else : 
-                v_la=decode_segmap(_label.cpu().detach().numpy().astype('uint8'),name='full')
+                v_la=decode_segmap(_label.cpu().detach().numpy(),name='full')
                 _input = _input.detach().cpu().numpy()
-                
-                if model == 'DANET':
+                normalizedImg = np.zeros((1024, 1024))
+                _input = cv2.normalize(_input,  normalizedImg, 0, 65535 , cv2.NORM_MINMAX)
+                if model == 'DANET' or model == 'multi_net':
                     pre_body1=decode_segmap(torch.argmax(DAnetpredict[0][:,0:4],dim=1).cpu().numpy())
                     pre_body2=decode_segmap(torch.argmax(DAnetpredict[1][:,0:4],dim=1).cpu().numpy())
                     pre_body3=decode_segmap(torch.argmax(DAnetpredict[2][:,0:4],dim=1).cpu().numpy())
-                    save_stack_images = {'pre_1':pre_body1,'pre_2':pre_body2,'pre_3':pre_body3,'v_la':v_la,'_input':_input}
+                    pre_body4=decode_segmap(torch.argmax(DAnetpredict[3][:,0:4],dim=1).cpu().numpy())
+                    save_stack_images = {'pre_1':pre_body1,'pre_2':pre_body2,'pre_3':pre_body3,'pre_4':pre_body4,'v_la':v_la,'_input':_input}
                     
                 else:
                     
                     pre_body=decode_segmap(predict)
-                    save_stack_images = {'pre_body':pre_body,'v_la':v_la,'_input':_input}
+                    save_stack_images = {'pre_body':pre_body,'v_la':v_la,'_input':_input.astype('uint16')}
                     # inversepre_body=decode_segmap(torch.argmax(predict[:,4:8],dim=1).cpu().numpy(),name='inverse')
 
                 
@@ -633,8 +664,12 @@ if load_pretrain == True:
 if testing == True:
     #testing
     print("==========testing===============")
-    testDir ='../test_image/'
-    tlabelDir = '../test_label/'
+    #uint8
+    # testDir ='../test_image/'
+    # tlabelDir = '../test_label/'
+    #uint16
+    testDir ='../AIAR_orignal_data/test_project_image/'
+    tlabelDir = '../AIAR_orignal_data/test_project_label/'
     
     gen.eval()
     logger = Logger(path,batch_size=batch_size)
@@ -665,9 +700,9 @@ if testing == True:
                 predict = torch.cat((back, body,dend,axon),dim=1).cuda().float()
 
             else :
-                if model == 'DANET':
+                if model == 'DANET'or model == 'multi_net':
                     DAnetpredict = predict
-                    predict = predcit[2]
+                    predict = predcit[0]
                 else:
                     predict = gen(_input)
 
@@ -675,7 +710,12 @@ if testing == True:
             print(path)
             # predict = channel_segmap(predict.cpu().numpy())
             # vevaluator.add_batch(_label.cpu().numpy(),predict)
-            predict = EROSION(torch.argmax(predict,dim=1).cpu().numpy())
+            
+            predict = torch.argmax(predict,dim=1).cpu().numpy()
+            #select class
+
+            # predict[mask] = EROSION(predict[mask])
+
             vevaluator.add_batch(_label.cpu().numpy(),predict)
             IOU,Class_IOU,wo_back_MIoU = vevaluator.Mean_Intersection_over_Union()
             Acc_class,Class_ACC,wo_back_ACC = vevaluator.Pixel_Accuracy_Class()
@@ -685,16 +725,16 @@ if testing == True:
             
 
             # result_crf=np.array(decode_segmap(result_crf,name='full'))
-            if model == 'DANET':
+            if model == 'DANET' or model == 'multi_net':
                 pre_body1=decode_segmap(torch.argmax(DAnetpredict[0][:,0:4],dim=1).cpu().numpy())
                 pre_body2=decode_segmap(torch.argmax(DAnetpredict[1][:,0:4],dim=1).cpu().numpy())
                 pre_body3=decode_segmap(torch.argmax(DAnetpredict[2][:,0:4],dim=1).cpu().numpy())
-                    
+                pre_body4=decode_segmap(torch.argmax(DAnetpredict[3][:,0:4],dim=1).cpu().numpy())
             else:
-                pre_body=decode_segmap(predict.astype('uint8'),nc=4,name='full')
+                pre_body=decode_segmap(predict.astype('uint16'),nc=4,name='full')
                 # pre_body=decode_segmap(ch_channel(predict),nc=4,name='full')
             # pre_body=decode_segmap(ch_channel(predict),nc=4,name='full')
-            v_la=decode_segmap(_label.cpu().detach().numpy().astype('uint8'),nc=4,name='full')
+            v_la=decode_segmap(_label.cpu().detach().numpy().astype('uint16'),nc=4,name='full')
             _input = _input.detach().cpu().numpy()
             
             total_IOU.append(Class_IOU)

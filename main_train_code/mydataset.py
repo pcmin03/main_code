@@ -84,8 +84,9 @@ class mydataset_3d(Dataset):
         return clip,labels
 
 class mydataset_2d(Dataset):
-    def __init__(self,imageDir,labelDir,usetranform=True,patchwise=True,threshold=0.1,phase='train',multichannel=False,isDir=True):
+    def __init__(self,imageDir,labelDir,usetranform=True,patchwise=True,threshold=0.1,phase='train',multichannel=False,isDir=True,preprocessing=True):
         
+        self.preprocessing = preprocessing
         self.multichannel = multichannel
         self.isDir = isDir
         if isDir == True:
@@ -102,16 +103,16 @@ class mydataset_2d(Dataset):
                 img = skimage.io.imread(self.imageDir[i])
                 lab = skimage.io.imread(self.labelDir[i])
                 lab = skimage.color.rgb2gray(lab)
-                
                 #set hard constraiant 
-                img = gaussian_filter(img, sigma=1)
-                img_threshold = skimage.filters.threshold_yen(img)
+                if self.preprocessing == True:
+                    img = gaussian_filter(img, sigma=1)
+                    img_threshold = skimage.filters.threshold_yen(img)
 
-                img = (img > img_threshold) * img
+                    img = (img > img_threshold) * img
 
-                normalizedImg = np.zeros((1024, 1024))
-                img = cv2.normalize(img,  normalizedImg, 0, 255, cv2.NORM_MINMAX)
-                img = img.astype('uint8')
+                # normalizedImg = np.zeros((1024, 1024))
+                # img = cv2.normalize(img,  normalizedImg, 0, 255, cv2.NORM_MINMAX)
+                # img = img.astype('uint8')
                 
                 if phase=='train':  
                     if patchwise == True:
@@ -149,8 +150,16 @@ class mydataset_2d(Dataset):
             self.labels = np.array(natsorted(glob.glob(labelDir+'*')))
 
         self.transform = transforms.Compose([tr.RandomHorizontalFlip()])
-        self.L_transform = transforms.Compose([transforms.ToTensor(),
-                        transforms.Normalize([0.5], [0.5])])
+        if images[0].dtype == 'uint8':
+            self.L_transform = transforms.Compose([transforms.ToTensor(),
+                            transforms.Normalize([0.5], [0.5])])
+        # elif images[0].dtype == 'uint16':
+        #     self.L_transform = transfroms.Compose([
+        #     transforms.Lambda(lambda image: torch.tensor(numpy.array(image).astype(numpy.float32)).unsqueeze(0)),
+        #     transforms.Normalize((0.5), (0.5))])
+            # self.L_transform = transforms.Compose([transforms.ToTensor(),
+            #                     transforms.Normalize([0.5], [0.5])])
+        
         self.usetranform = usetranform
 
         print(len(self.images),len(self.labels))
@@ -220,11 +229,12 @@ class mydataset_2d(Dataset):
             image = skimage.io.imread(image)
             label = skimage.io.imread(label)
             label = skimage.color.rgb2gray(label)
-            image = gaussian_filter(image, sigma=1)
-            img_threshold = skimage.filters.threshold_yen(image)
-            image = (image > img_threshold) * image
+            if self.preprocessing == True:
+                image = gaussian_filter(image, sigma=1)
+                img_threshold = skimage.filters.threshold_yen(image)
+                image = (image > img_threshold) * image
 
-        image = np.array(image).astype('uint8')
+        image = np.array(image)
         label = np.array(label)
         
         #give label
@@ -241,8 +251,8 @@ class mydataset_2d(Dataset):
 
         if self.usetranform == 'train':
             toPIL = transforms.ToPILImage()
-            image = toPIL(image.astype('uint8'))
-            label = toPIL(label.astype('uint8'))
+            image = toPIL(image)
+            label = toPIL(label)
             # image = image.convert('rgb')
             image,label = t_transform([image,label])
             if random.random() > 0.5:        
@@ -251,7 +261,11 @@ class mydataset_2d(Dataset):
                 image,label = roate([image,label])
                 
         # image = image.convert('rgb')
-
+        # print(image.dtype)
+        if image.dtype == 'uint16':
+            self.L_transform = transforms.Compose([
+                transforms.Lambda(lambda image: torch.from_numpy(np.array(image).astype(np.float32)).unsqueeze(0)),
+                transforms.Normalize([0.5], [0.5])])
         clip = self.L_transform(image)
         label = np.array(label)
         if self.multichannel == True:
@@ -260,8 +274,8 @@ class mydataset_2d(Dataset):
             dend_lable = np.where(label==2,np.ones_like(label),np.zeros_like(label))
             axon_lable = np.where(label==3,np.ones_like(label),np.zeros_like(label))
             label = [back_lable, body_lable,dend_lable,axon_lable]
-        label = np.array(label)
-
+        label = np.array(label).astype('float32')
+        # print(clip.dtype)
         return clip,label
 
 class prjection_mydataset(Dataset):
