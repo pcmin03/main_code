@@ -16,13 +16,15 @@ from neuron_util import *
 from neuron_util import channel_wise_segmentation
 from my_loss import *
 import config
-from mydataset import prjection_mydataset,mydataset_2d
+from mydataset import mydataset_2d
 from logger import Logger
 from metrics import *
 import argparse
 import torch.autograd as autograd
 
- 
+from HED import HED
+from RCF import RCF
+
 from fusenet import ICNet 
 parser = argparse.ArgumentParser(description='Process some integers')
 parser.add_argument('--knum', help='Select Dataset')
@@ -63,16 +65,38 @@ print(knum,'=============')
 foldnum = 10
 betavalue = 2
 phase = 'train'
-model = 'pspnet'
+model = 'unet'
+data_name = 'uint16'
 
 # name = "Adaptive_Full_image_weight"+str(args.weight)
 # name = "Adaptive_Full_image_RMSE"
-# name = "Adpative_attention_module"+str(args.weight)
-# name = "original"
+# name = "Adpative_at0tention_module"+str(args.weight)
+# name = "neworiginalv7"+str(data_name)
+name = "neworiginalv3"+str(data_name)
+# name = "neworiginal"
+# neworiginalv3
+# unetmodel8neworiginal
+# name = Adaptive_Full_image_gaussian_AdaptiveCE_V21000.0_uint16_
+# name = "Adaptive_Full_image_AdaptiveCE_"+str(int(args.weight))+'_'+str(data_name)+'_'
+# name = "New_Adaptive_Full_image_AdaptiveCE_dend_"+str(int(args.weight))+'_'+str(data_name)+'_'
+# name = "New_Adaptive_Full_image_AdaptiveCE_full_v2"+str(int(args.weight))+'_'+str(data_name)+'_'
+
 # name = "Adaptive_Full_image_AdaptiveCE_"+str(int(args.weight))
+# name = "Adaptive_Full_image_AdaptiveCE_Multiloss"+str(int(args.weight))+'_'+str(data_name)+'_'
+
 # name = "Adaptive_Full_image_class_AdaptiveCE_v2"+str(args.weight)
-# name  =  "Adaptive_Full_image_gaussian_AdaptiveCE_V2"+str(args.weight)
-name  =  "Adaptive_Full_image_gaussian_AdaptiveCE_V2_uint16"+str(args.weight)
+# name  =  "Adaptive_Full_image_gaussian_AdaptiveCE_V3"+str(args.weight)+'_'+str(data_name)+'_'
+# name  =  "Adaptive_Full_image_class_gaussian_AdaptiveCE_V3"+str(args.weight)+'_'+str(data_name)+'_'
+# unetmodel/unetmodel8Adaptive_Full_image_gaussian_AdaptiveCE_V2_uint161000.0/
+# name  =  "Adaptive_Full_image_gaussian_AdaptiveCE_V2"+str(args.weight)+'_'+str(data_name)+'_'
+# unetmodel8New_Adaptive_Full_image_AdaptiveCE_full_v21000_uint16_
+# name = "Adaptive_Full_image_gaussian_AdaptiveCE_V2_"+str(data_name)+str(args.weight)
+# unetmodel8New_Adaptive_Full_image_AdaptiveCE_full_v21000_uint16_/
+# name = "New_Adaptive_Full_image_AdaptiveCE_full_v2"+str(int(args.weight))+'_'+str(data_name)+'_'
+# name  =  "Adaptive_Full_image_gaussian_AdaptiveCE_V2"'_'+str(data_name)+str(args.weight)
+# name = 'Adaptive_Full_image_gaussian_AdaptiveCE_V210003.0_uint16_'
+# name  =  "Adaptive_Full_image_gaussian_AdaptiveCE_V2_up_"+str(args.weight)+'_'+str(data_name)+'_'
+# name  =  "Adaptive_Full_image_gaussian_AdaptiveCE_V2_uint16"+str(args.weight)
 
 # name = "remove_background_Adaptive_Full_image_gaussian_AdaptiveCE_V2"+str(args.weight)
 # name = "Adaptive_Full_image_class_AdaptiveCE_"+str(args.weight)
@@ -91,7 +115,7 @@ name  =  "Adaptive_Full_image_gaussian_AdaptiveCE_V2_uint16"+str(args.weight)
 # path = '../nested_CV_nest_net_loss'+str(knum)+'/'
 
 load_pretrain = args.pretrain
-deepsupervision = True
+deepsupervision = False
 trainning = True
 testing = True
 discrim = False
@@ -99,17 +123,35 @@ deleteall = False
 patchwise = False
 multichannel = False
 multi_ = False
+preprocessing_ = False
+multiple_scale = False
 
 #set data path 
 cross_validation = True
 
-# uint 8
-# imageDir= '../new_project_original_image/'
-# labelDir = '../new_project_label_modify_image/'
+if data_name == 'uint8':
+    #uint8 train
+    imageDir= '../new_project_original_image/'
+    labelDir = '../new_project_label_modify_image/'
+    #uint8 test
+    testDir ='../test_image/'
+    tlabelDir = '../test_label/'
 
-#uint16
-imageDir= '../AIAR_orignal_data/train_project_image/'
-labelDir = '../AIAR_orignal_data/train_project_label/'
+elif data_name == 'uint16':
+    #uint16 train
+    imageDir= '../AIAR_orignal_data/train_project_image/'
+    labelDir = '../AIAR_orignal_data/train_project_label/'
+    #uint16 test
+    testDir ='../AIAR_orignal_data/test_project_image/'
+    tlabelDir = '../AIAR_orignal_data/test_project_label/'
+
+elif data_name == 'edge':
+    #edge dataset train
+    imageDir= '../AIAR_orignal_data/train_project_image/'
+    labelDir = '../AIAR_orignal_data/train_boundary_label/'
+    #edge dataset test
+    testDir= '../AIAR_orignal_data/train_project_image/'
+    tlabelDir = '../AIAR_orignal_data/test_boundary_label/'
 
 
 modelsave_dir = '../'+str(model)+'model'
@@ -122,6 +164,17 @@ path = modelsave_dir+'/'+str(model)+'model'+str(knum)+str(name)+'/'
 #set devices
 device = torch.device('cuda:'+str(args.gpu)if torch.cuda.is_available() else "else")
 
+def weights_init(m):
+    if isinstance(m, nn.Conv2d):
+        # xavier(m.weight.data)
+        m.weight.data.normal_(0, 0.01)
+        if m.weight.data.shape == torch.Size([1, 5, 1, 1]):
+            # for new_score_weight
+            torch.nn.init.constant_(m.weight, 0.2)
+        if m.bias is not None:
+            m.bias.data.zero_()
+
+#image segmentation 
 if model =='unet':
     batch_size = 100
     gen = pretrain_unet(4).to(device)
@@ -146,6 +199,9 @@ elif model=='multi_net':
     batch_size = 150
     gen = ICNet().to(device)
 
+elif model=='refinenet':
+    batch_size = 50
+    gen = refinenet().to(device)
 
 elif model == 'efficent_unet':
     batch_size = 40
@@ -170,12 +226,29 @@ elif model == 'Multi_Unet':
 elif model == 'DANET':
     batch_size = 35
     gen = DANet().to(device)
+#boundray detection
+elif model == 'CASENet':
+    batch_size = 15
+    gen = pretrain_casenet().to(device)
+
+elif model == 'HED':
+    batch_size = 40
+    gen = HED().to(device).apply(weights_init)
+    eval_channel = int(2)
+    classnum = int(2)
+
+elif model == 'RCF' :
+    batch_size = 60
+    gen = RCF().to(device).apply(weights_init)
+    eval_channel = int(2)
+    classnum = int(2)
+
+    
+    
 
 
 
 #set paralle
-
-
 if paralle == True:
     gen = torch.nn.DataParallel(gen, device_ids=[0,1])
 
@@ -187,9 +260,77 @@ else:
     #training
 
 optimizerG = optim.Adam(gen.parameters(),lr=learning_rate)
+    #tune lr
+if model == 'HED' or model == 'RCF' :
+    net_parameters_id = {}
+    net = gen
+    for pname, p in net.named_parameters():
+        if pname in ['conv1_1.weight','conv1_2.weight',
+                        'conv2_1.weight','conv2_2.weight',
+                        'conv3_1.weight','conv3_2.weight','conv3_3.weight',
+                        'conv4_1.weight','conv4_2.weight','conv4_3.weight']:
+            print(pname, 'lr:1 de:1')
+            if 'conv1-4.weight' not in net_parameters_id:
+                net_parameters_id['conv1-4.weight'] = []
+            net_parameters_id['conv1-4.weight'].append(p)
+        elif pname in ['conv1_1.bias','conv1_2.bias',
+                        'conv2_1.bias','conv2_2.bias',
+                        'conv3_1.bias','conv3_2.bias','conv3_3.bias',
+                        'conv4_1.bias','conv4_2.bias','conv4_3.bias']:
+            print(pname, 'lr:2 de:0')
+            if 'conv1-4.bias' not in net_parameters_id:
+                net_parameters_id['conv1-4.bias'] = []
+            net_parameters_id['conv1-4.bias'].append(p)
+        elif pname in ['conv5_1.weight','conv5_2.weight','conv5_3.weight']:
+            print(pname, 'lr:100 de:1')
+            if 'conv5.weight' not in net_parameters_id:
+                net_parameters_id['conv5.weight'] = []
+            net_parameters_id['conv5.weight'].append(p)
+        elif pname in ['conv5_1.bias','conv5_2.bias','conv5_3.bias'] :
+            print(pname, 'lr:200 de:0')
+            if 'conv5.bias' not in net_parameters_id:
+                net_parameters_id['conv5.bias'] = []
+            net_parameters_id['conv5.bias'].append(p)
+
+        elif pname in ['score_dsn1.weight','score_dsn2.weight','score_dsn3.weight',
+                        'score_dsn4.weight','score_dsn5.weight']:
+            print(pname, 'lr:0.01 de:1')
+            if 'score_dsn_1-5.weight' not in net_parameters_id:
+                net_parameters_id['score_dsn_1-5.weight'] = []
+            net_parameters_id['score_dsn_1-5.weight'].append(p)
+        elif pname in ['score_dsn1.bias','score_dsn2.bias','score_dsn3.bias',
+                        'score_dsn4.bias','score_dsn5.bias']:
+            print(pname, 'lr:0.02 de:0')
+            if 'score_dsn_1-5.bias' not in net_parameters_id:
+                net_parameters_id['score_dsn_1-5.bias'] = []
+            net_parameters_id['score_dsn_1-5.bias'].append(p)
+        elif pname in ['score_final.weight']:
+            print(pname, 'lr:0.001 de:1')
+            if 'score_final.weight' not in net_parameters_id:
+                net_parameters_id['score_final.weight'] = []
+            net_parameters_id['score_final.weight'].append(p)
+        elif pname in ['score_final.bias']:
+            print(pname, 'lr:0.002 de:0')
+            if 'score_final.bias' not in net_parameters_id:
+                net_parameters_id['score_final.bias'] = []
+            net_parameters_id['score_final.bias'].append(p)
+
+    optimizer = torch.optim.SGD([
+            {'params': net_parameters_id['conv1-4.weight']      , 'lr': args.start_lr*1    , 'weight_decay': args.weight_decay},
+            {'params': net_parameters_id['conv1-4.bias']        , 'lr': args.start_lr*2    , 'weight_decay': 0.},
+            {'params': net_parameters_id['conv5.weight']        , 'lr': args.start_lr*100  , 'weight_decay': args.weight_decay},
+            {'params': net_parameters_id['conv5.bias']          , 'lr': args.start_lr*200  , 'weight_decay': 0.},
+            {'params': net_parameters_id['score_dsn_1-5.weight'], 'lr': args.start_lr*0.01 , 'weight_decay': args.weight_decay},
+            {'params': net_parameters_id['score_dsn_1-5.bias']  , 'lr': args.start_lr*0.02 , 'weight_decay': 0.},
+            {'params': net_parameters_id['score_final.weight']  , 'lr': args.start_lr*0.001, 'weight_decay': args.weight_decay},
+            {'params': net_parameters_id['score_final.bias']    , 'lr': args.start_lr*0.002, 'weight_decay': 0.},
+        ], lr=args.start_lr, momentum=0.9, weight_decay=2e-4)
+
 
 if use_scheduler == 'Cosine':
     scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizerG,100,T_mult=1,eta_min=end_rate)
+    if model == 'HED' or model == 'RCF' :
+        scheduler = optim.lr_scheduler.StepLR(optimizerG, step_size=100, gamma=0.1)
 
 if discrim == True:
     batch_size = 50
@@ -222,8 +363,19 @@ def compute_gradient_penalty(D, real_samples, fake_samples):
     gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
     return gradient_penalty
 #set loss
-criterion = Custom_Adaptive_Gaussian_DistanceMap(int(args.weight),distanace_map=False).to(device)
+# criterion = Custom_CE(int(args.weight),Gaussian=True).to(device)
+# criterion = Custom_Adaptive_Gaussian_DistanceMap(int(args.weight),True).to(device)
+# criterion = Custom_dend_Adaptive_Gaussian_DistanceMap(int(args.weight),True).to(device)
 
+# criterion = Custom_WeightedCrossEntropyLossV2().to(device)
+
+criterion = Custom_WeightedCrossEntropyLossV2().to(device)
+# criterion = MultiLLFunction().to(device)
+
+# criterion = cross_entropy_loss().to(device)
+
+
+# MultiLLFunction
 print(1/(1+int(args.weight)),'1111')
 
 #set matrix score
@@ -249,15 +401,17 @@ if trainning == True:
         # if os.path.exists(path+"lastsave_models{}.pth"):
         checkpoint = torch.load(path +"lastsave_models{}.pth")
         gen.load_state_dict(checkpoint['gen_model'])
+    else: 
+        pass
         
     if cross_validation == True:
         print(f"{image_valid},{label_valid}")
         print(f"{image[train_num]},{labels[train_num]}")
-        MyDataset = {'train': DataLoader(mydataset_2d(image_train,label_train,patchwise=patchwise,multichannel=multichannel,preprocessing=False),
+        MyDataset = {'train': DataLoader(mydataset_2d(image_train,label_train,patchwise=patchwise,multichannel=multichannel,preprocessing=preprocessing_,multiple_scale=multiple_scale),
                                         batch_size, 
                                         shuffle = True,
                                         num_workers = num_workers),
-                    'valid' : DataLoader(mydataset_2d(image_valid,label_valid,False,patchwise=patchwise,phase='test',multichannel=multichannel,preprocessing=False),
+                    'valid' : DataLoader(mydataset_2d(image_valid,label_valid,False,patchwise=patchwise,phase='test',multichannel=multichannel,preprocessing=preprocessing_,multiple_scale=multiple_scale),
                                         1, 
                                         shuffle = False,
                                         num_workers = num_workers)}
@@ -334,6 +488,7 @@ if trainning == True:
                 else :
                     ##### train with source code #####
                     predict=gen(_input)
+                    precision =predict
                     if classnum == 8:
                         CE_loss = criterion(predict,_label)
                         inversevaluator.add_batch(_label.cpu().numpy(),torch.argmax(predict[:,5:8],dim=1).cpu().numpy())
@@ -347,15 +502,32 @@ if trainning == True:
                     
                     else:
 
-                        if model == 'DANET' or model == 'multi_net':
+                        if model == 'DANET' or model == 'multi_net' or model == 'refinenet':
                             CE_loss1 = criterion(predict[0],_label)
-                            CE_loss2 = criterion(predict[1],_label,upsample=True)
-                            CE_loss3 = criterion(predict[2],_label,upsample=True)
-                            CE_loss4 = criterion(predict[3],_label,upsample=True)
+                            CE_loss2,_ = criterion(predict[1],_label,upsample=True)
+                            CE_loss3,_ = criterion(predict[2],_label,upsample=True)
+                            CE_loss4,_ = criterion(predict[3],_label,upsample=True)
                             CE_loss = (CE_loss1 + CE_loss2 + CE_loss3 + CE_loss4)
-                            predict = predict[0]
+                            if multiple_scale == True:
+                                predict[0] = F.interpolate(predict[0], predict[1].size()[2:])
+                                _label = F.interpolate(_label.unsqueeze(1), predict[1].size()[2:])[:,0]
+                                predict = predict[0]
+                            elif multiple_scale == False:
+                                predict = predict[0]
                         else :
-                            CE_loss = criterion(predict,_label)
+                            # CE_loss = criterion(predict[0],_label)
+                            if model == 'HED' or model == 'RCF' or model == 'CASENet':
+                                CE_loss = torch.zeros(1).cuda()
+                                for o in predict:
+                                    CE_loss += criterion(o,_label)
+                                CE_loss = CE_loss / len(predict)
+                                predict = predict[0]
+
+                            else :
+                                CE_loss = criterion(predict,_label)
+
+                            # CE_loss += criterion(predict[1],_label)
+                            
                         # dice_loss = criterion_v2(predict,_label)
                         
                         if discrim == True:
@@ -380,8 +552,40 @@ if trainning == True:
                         seg_loss_body = CE_loss 
                         seg_loss_body.backward(retain_graph = True)
                         optimizerG.step()
+                        
+                        predict = torch.argmax(predict,dim=1).cpu().numpy()
+                        
+                        if model == 'CASENet' or data_name == 'edge':
+                            # compare_result = precision[0] > 0.5
+                            # mid_result[compare_result == 1] = 1
+                            # mid_result[compare_result == 0] = 0
+                            
+                            mid_result = precision[0]
+                            compare_back = precision[0][:,0] > 0.5
+                            compare_body = precision[0][:,1] > 0.5
+                            compare_dend = precision[0][:,2] > 0.5
+                            compare_axon = precision[0][:,3] > 0.5
 
-                        evaluator.add_batch(_label.cpu().numpy(),torch.argmax(predict,dim=1).cpu().numpy())
+                            mid_result[:,0][compare_back == 1] = 0
+                            mid_result[:,0][compare_back == 0] = 0
+                            
+                            mid_result[:,1][compare_body == 1] = 1
+                            mid_result[:,1][compare_body == 0] = 0
+                            
+                            mid_result[:,2][compare_dend == 1] = 1
+                            mid_result[:,2][compare_dend == 0] = 0
+                            
+                            mid_result[:,3][compare_axon == 1] = 1
+                            mid_result[:,3][compare_axon == 0] = 0
+
+                            final = mid_result[:,0] + mid_result[:,1] + mid_result[:,2] *2 +mid_result[:,3] *3
+                            evaluator.add_batch(_label.cpu().numpy(),final.cpu().detach().numpy().astype('uint8'))
+                        else : 
+                      
+                            evaluator.add_batch(_label.cpu().numpy(),predict)
+
+                        # print(precision.shape)
+                        
                         IOU,Class_IOU,wo_back_MIoU = evaluator.Mean_Intersection_over_Union()
                         Class_precision, Class_recall,Class_F1score = evaluator.Class_F1_score()
                         _, _,Class_Fbetascore = evaluator.Class_Fbeta_score(beta=betavalue)                    
@@ -444,7 +648,7 @@ if trainning == True:
 
                     else:
                         predict=gen(_input)
-                        
+                        precision = predict
                         if classnum == 8:
                             inversevaluator.add_batch(_label.cpu().numpy(),torch.argmax(predict[:,],dim=1).cpu().numpy())
                             _,inverseClass_IOU,_ = inversevaluator.Mean_Intersection_over_Union()
@@ -460,24 +664,71 @@ if trainning == True:
 
                             val_CE_loss = criterion(predict,_label)
                         else : 
-                            if model == 'DANET' or model == 'multi_net':
+                            if model == 'DANET' or model == 'multi_net' or model == 'refinenet':
                                 DAnetpredict = predict
+                                
                                 CE_loss1 = criterion(predict[0],_label)
-                                CE_loss2 = criterion(predict[1],_label,upsample=True)
-                                CE_loss3 = criterion(predict[2],_label,upsample=True)
-                                CE_loss4 = criterion(predict[3],_label,upsample=True)
+                                CE_loss2,label2 = criterion(predict[1],_label,upsample=True)
+                                CE_loss3,label3 = criterion(predict[2],_label,upsample=True)
+                                CE_loss4,label4 = criterion(predict[3],_label,upsample=True)
                                 val_CE_loss = (CE_loss1 + CE_loss2 + CE_loss3 + CE_loss4)
-                                predict = predict[0]
+                                if multiple_scale == True:
+                                    # print(predict[0].shape)
+                                    
+                                    predict[0] = F.interpolate(predict[0], predict[1].size()[2:])
+                                    _label = F.interpolate(_label.unsqueeze(1), predict[1].size()[2:])[:,0]
+                                    predict = predict[0]
+                                    # print(_label.shape,predict.shape)
+                                    # print(predict.shape)
+                                elif multiple_scale == False:
+                                    predict = predict[0]
                             # vevaluator.add_batch(_label.cpu().numpy(),predict)
                             else : 
-                                val_CE_loss = criterion(predict,_label)
+                                if model == 'HED' or model == 'RCF' or model == 'CASENet':
+                                    val_CE_loss = torch.zeros(1).cuda()
+                                    for o in predict:
+                                        val_CE_loss += criterion(o,_label)
+                                    val_CE_loss = val_CE_loss / len(predict)
+                                    
+                                    predict = predict[0]
+                                else : 
+                                    val_CE_loss = criterion(predict,_label)
+                            predict = torch.argmax(predict,dim=1).cpu().numpy()
+                                # val_CE_loss = criterion(predict[0],_label)
+                                # val_CE_loss += criterion(predict[1],_label)
+                                
                                 # val_dice_loss = criterion_v2(predict,_label)
                         
                             val_loss = val_CE_loss  
                             # EROSION
                             
-                            predict = torch.argmax(predict,dim=1).cpu().numpy()
-                            vevaluator.add_batch(_label.cpu().numpy(),predict)
+                            
+                            # print(precision[0].shape,'11111')
+                            if model == 'CASENet' or data_name == 'edge':
+                                mid_result = precision[0]
+                                compare_back = precision[0][:,0] > 0.5
+                                compare_body = precision[0][:,1] > 0.5
+                                compare_dend = precision[0][:,2] > 0.5
+                                compare_axon = precision[0][:,3] > 0.5
+
+                                mid_result[:,0][compare_back == 1] = 0
+                                mid_result[:,0][compare_back == 0] = 0
+                                
+                                mid_result[:,1][compare_body == 1] = 1
+                                mid_result[:,1][compare_body == 0] = 0
+                                
+                                mid_result[:,2][compare_dend == 1] = 1
+                                mid_result[:,2][compare_dend == 0] = 0
+                                
+                                mid_result[:,3][compare_axon == 1] = 1
+                                mid_result[:,3][compare_axon == 0] = 0
+
+                                final = mid_result[:,0] + mid_result[:,1] + mid_result[:,2] *2 +mid_result[:,3] *3
+                                # print(final.shape)
+                                vevaluator.add_batch(_label.cpu().numpy(),final.cpu().numpy().astype('uint8'))
+                            # print(predict.shape,'1',precision[0][:,0].shape)
+                            else:
+                                vevaluator.add_batch(_label.cpu().numpy(),predict)
                             IOU,Class_IOU,wo_back_MIoU = vevaluator.Mean_Intersection_over_Union()
                             Acc_class,Class_ACC,wo_back_ACC = vevaluator.Pixel_Accuracy_Class()
                             Class_precision, Class_recall,Class_F1score = vevaluator.Class_F1_score()
@@ -564,7 +815,7 @@ if trainning == True:
             inverseF1score_scalar = dict()
             inverseFbetascore_scalar = dict()
 
-            for i in range(4):
+            for i in range(classnum):
                 IOU_scalar.update({'val_IOU_'+str(i):Class_IOU[i]})
                 precision_scalar.update({'val_precision_'+str(i):Class_precision[i]})
                 recall_scalr.update({'val_recall_'+str(i):Class_recall[i]})
@@ -595,15 +846,15 @@ if trainning == True:
                 logger.summary_scalars(inverseFbetascore_scalar,epoch,'inverseFbeta')
             
 
-            if  (Class_IOU[3] > best_axon) or (Class_F1score[3] > best_axon_recall) :
+            if  (Class_IOU[classnum-1] > best_axon) or (Class_F1score[classnum-1] > best_axon_recall) :
                 torch.save({"gen_model":gen.state_dict(),
                         "optimizerG":optimizerG.state_dict(),
                         "epochs":epoch},
                         path+"bestsave_models{}.pth")
                 print('save!!!')
-                best_axon = Class_IOU[3]
-                best_axon_recall = Class_F1score[3]
-                F1best = Class_F1score[3]
+                best_axon = Class_IOU[classnum-1]
+                best_axon_recall = Class_F1score[classnum-1]
+                F1best = Class_F1score[classnum-1]
                 best_epoch = epoch
 
                         
@@ -621,21 +872,57 @@ if trainning == True:
                 #     v_la = decode_segmap(torch.argmax(_label,dim=1).cpu().detach().numpy(),name='full')
                 #     _input = _input.detach().cpu().numpy()
                 # else : 
-                v_la=decode_segmap(_label.cpu().detach().numpy(),name='full')
+                if model == 'HED' or model == 'RCF'  :
+                    v_la = (1-_label.unsqueeze(1).cpu().detach().numpy())*255.0
+                elif model == 'CASENet':
+                    v_la = decode_segmap(_label.cpu().detach().numpy(),name='convert')
+                else:
+                    v_la = decode_segmap(_label.cpu().detach().numpy(),name='full')
                 _input = _input.detach().cpu().numpy()
                 normalizedImg = np.zeros((1024, 1024))
                 _input = cv2.normalize(_input,  normalizedImg, 0, 65535 , cv2.NORM_MINMAX)
-                if model == 'DANET' or model == 'multi_net':
+                if model == 'DANET' or model == 'multi_net' or model == 'refinenet':
+                    v_la2=decode_segmap(label2.cpu().detach().numpy(),name='full')
+                    v_la3=decode_segmap(label3.cpu().detach().numpy(),name='full')
+                    v_la4=decode_segmap(label4.cpu().detach().numpy(),name='full')
+                        
                     pre_body1=decode_segmap(torch.argmax(DAnetpredict[0][:,0:4],dim=1).cpu().numpy())
                     pre_body2=decode_segmap(torch.argmax(DAnetpredict[1][:,0:4],dim=1).cpu().numpy())
                     pre_body3=decode_segmap(torch.argmax(DAnetpredict[2][:,0:4],dim=1).cpu().numpy())
                     pre_body4=decode_segmap(torch.argmax(DAnetpredict[3][:,0:4],dim=1).cpu().numpy())
-                    save_stack_images = {'pre_1':pre_body1,'pre_2':pre_body2,'pre_3':pre_body3,'pre_4':pre_body4,'v_la':v_la,'_input':_input}
-                    
+
+                    save_stack_images = {'pre_1_':pre_body1,'pre_2_':pre_body2,'pre_3_':pre_body3,'pre_4_':pre_body4,'v_la_':v_la,'_input_':_input}
+                    save_stack_images.update({'v_la2_':v_la2,'v_la3_':v_la3,'v_la4_':v_la4})
                 else:
+                    # print(predict.shape)
+
+                    pre_body = decode_segmap(predict)
                     
-                    pre_body=decode_segmap(predict)
-                    save_stack_images = {'pre_body':pre_body,'v_la':v_la,'_input':_input.astype('uint16')}
+                    # precision
+                    # torchvision.utils.save_images(1-results_all,)
+                    save_stack_images = {'v_la':v_la,'_input':_input.astype('uint16')}
+                    if model == 'CASENet':
+                        # precision
+                        pre_body = predict_label(precision[0],name='convert')
+                        save_stack_images.update({'pre_body_back':pre_body[0],
+                                            'pre_body_body':pre_body[1],
+                                            'pre_body_dend':pre_body[2],
+                                            'pre_body_axon':pre_body[3],
+                                            'pre_body_full':pre_body[0]+pre_body[1]+pre_body[2]+pre_body[3]})
+                    
+                    # save_stack_images = {'pre_body1':pre_body[1],'v_la':v_la,'_input':_input.astype('uint16')}
+                    # precision=score_output(precision)
+                    # print(precision.shape)
+                    if model == 'HED' or model =='RCF':
+                        result = torch.squeeze(precision[-1].detach()).cpu().numpy()
+                        results_all = torch.zeros((len(precision),1,1024,1024))
+                        for i in range(len(precision)):
+                            results_all[i,0,:,:] = precision[i]
+                        results_all = results_all.cpu().detach().numpy()
+                        save_stack_images.update({'precision1':(1-results_all[0:1])*255.0,
+                        'precision2':(1-results_all[1:2])*255.0,
+                        'precision3':(1-results_all[2:3])*255.0,
+                        'precision4':(1-results_all[3:4])*255.0})
                     # inversepre_body=decode_segmap(torch.argmax(predict[:,4:8],dim=1).cpu().numpy(),name='inverse')
 
                 
@@ -655,22 +942,14 @@ if trainning == True:
 
                 logger.save_images(save_stack_images,epoch)
 
-if load_pretrain == True:
-    # if os.path.exists(path+"lastsave_models{}.pth"):
-    checkpoint = torch.load(path +"lastsave_models{}.pth")
-    gen.load_state_dict(checkpoint['gen_model'])
-
 
 if testing == True:
     #testing
     print("==========testing===============")
-    #uint8
-    # testDir ='../test_image/'
-    # tlabelDir = '../test_label/'
-    #uint16
-    testDir ='../AIAR_orignal_data/test_project_image/'
-    tlabelDir = '../AIAR_orignal_data/test_project_label/'
-    
+
+    # if os.path.exists(path+"lastsave_models{}.pth"):
+    checkpoint = torch.load(path +"lastsave_models{}.pth")
+    gen.load_state_dict(checkpoint['gen_model'])
     gen.eval()
     logger = Logger(path,batch_size=batch_size)
 
@@ -680,16 +959,16 @@ if testing == True:
     total_recall = []
     total_predict = []
 
-    MyDataset = {'valid' :   DataLoader(mydataset_2d(image_valid,label_valid,False,patchwise=patchwise,phase='test',multichannel=multichannel),
+    MyDataset = {'valid' :   DataLoader(mydataset_2d(image_valid,label_valid,False,patchwise=patchwise,phase='test',preprocessing=preprocessing_,multichannel=multichannel),
                             1, 
                             shuffle = False,
                             num_workers = num_workers),
-                'test' :   DataLoader(mydataset_2d(testDir,tlabelDir,False,patchwise=patchwise,phase='test',multichannel=multichannel, isDir=False),
+                'test' :   DataLoader(mydataset_2d(testDir,tlabelDir,False,patchwise=patchwise,phase='test',preprocessing=preprocessing_,multichannel=multichannel, isDir=False),
                             1, 
                             shuffle = False,
                             num_workers = num_workers)}
     phase = 'test'
-    logger.changedir('test_result')
+    logger.changedir(str(phase)+'_result2')
     
     for i, batch in enumerate(MyDataset[phase]):
         _input, _label = batch[0].to(device), batch[1].to(device)
@@ -700,42 +979,69 @@ if testing == True:
                 predict = torch.cat((back, body,dend,axon),dim=1).cuda().float()
 
             else :
-                if model == 'DANET'or model == 'multi_net':
-                    DAnetpredict = predict
-                    predict = predcit[0]
-                else:
+                if model == 'DANET'or model == 'multi_net' or model == 'refinenet' or model == 'RCF':
+                    # print(_input.max(),'1111')
                     predict = gen(_input)
+                    # print(predict[0].max(),'1111')
+                    DAnetpredict = predict
+                    precision = predict
+                    predict = predict[0]
+                else:
+                    
+                    predict = gen(_input)
+                    
+            
+            predict = torch.argmax(predict,dim=1).cpu().numpy()
 
             print("???????????????????????????????????????????????")
             print(path)
             # predict = channel_segmap(predict.cpu().numpy())
             # vevaluator.add_batch(_label.cpu().numpy(),predict)
+            if model =='RCF':
+                v_la = (1-_label.unsqueeze(1).cpu().detach().numpy())*255.0
+                
+            else:
+                v_la = decode_segmap(_label.cpu().detach().numpy().astype('uint16'),nc=4,name='full')
+            _input = _input.detach().cpu().numpy()
+            save_stack_images = {'final_la':v_la, 'FINAL_input':_input}
+
+            # result_crf=np.array(decode_segmap(result_crf,name='full'))
+            if model == 'DANET' or model == 'multi_net'  or model == 'refinenet':
+                pre_body1=decode_segmap(torch.argmax(DAnetpredict[0][:,0:4],dim=1).cpu().numpy())
+                pre_body2=decode_segmap(torch.argmax(DAnetpredict[1][:,0:4],dim=1).cpu().numpy())
+                pre_body3=decode_segmap(torch.argmax(DAnetpredict[2][:,0:4],dim=1).cpu().numpy())
+                pre_body4=decode_segmap(torch.argmax(DAnetpredict[3][:,0:4],dim=1).cpu().numpy())
+                save_stack_images = {'final_predict1':pre_body1,'final_predict2':pre_body2,'final_predict3':pre_body3,'final_predict4':pre_body4,'final_la':v_la,
+                                'FINAL_input':_input}
             
-            predict = torch.argmax(predict,dim=1).cpu().numpy()
+            elif model == 'RCF':    
+                result = torch.squeeze(precision[-1].detach()).cpu().numpy()
+                results_all = torch.zeros((len(precision),1,1024,1024))
+                for i in range(len(precision)):
+                    results_all[i,0,:,:] = precision[i]
+                results_all = results_all.cpu().detach().numpy()
+                save_stack_images.update({'precision1':((1-results_all[0:1])>0.5)*255.0,
+                                        'precision2':((1-results_all[1:2])>0.5)*255.0,
+                                        'precision3':((1-results_all[2:3])>0.5)*255.0,
+                                        'precision4':((1-results_all[3:4])>0.5)*255.0})
+                
+                vevaluator.add_batch(_label.cpu().numpy(),(1-results_all[0])>0.5)
+            else:
+                pre_body=decode_segmap(predict,nc=4,name='full')
+                
+                save_stack_images.update({'final_predict':pre_body})
+
             #select class
-
-            # predict[mask] = EROSION(predict[mask])
-
             vevaluator.add_batch(_label.cpu().numpy(),predict)
             IOU,Class_IOU,wo_back_MIoU = vevaluator.Mean_Intersection_over_Union()
             Acc_class,Class_ACC,wo_back_ACC = vevaluator.Pixel_Accuracy_Class()
             Class_precision, Class_recall,Class_F1score = vevaluator.Class_F1_score()
             _, _,Class_Fbetascore = vevaluator.Class_Fbeta_score(beta=betavalue)
 
-            
 
-            # result_crf=np.array(decode_segmap(result_crf,name='full'))
-            if model == 'DANET' or model == 'multi_net':
-                pre_body1=decode_segmap(torch.argmax(DAnetpredict[0][:,0:4],dim=1).cpu().numpy())
-                pre_body2=decode_segmap(torch.argmax(DAnetpredict[1][:,0:4],dim=1).cpu().numpy())
-                pre_body3=decode_segmap(torch.argmax(DAnetpredict[2][:,0:4],dim=1).cpu().numpy())
-                pre_body4=decode_segmap(torch.argmax(DAnetpredict[3][:,0:4],dim=1).cpu().numpy())
-            else:
-                pre_body=decode_segmap(predict.astype('uint16'),nc=4,name='full')
+            
                 # pre_body=decode_segmap(ch_channel(predict),nc=4,name='full')
             # pre_body=decode_segmap(ch_channel(predict),nc=4,name='full')
-            v_la=decode_segmap(_label.cpu().detach().numpy().astype('uint16'),nc=4,name='full')
-            _input = _input.detach().cpu().numpy()
             
             total_IOU.append(Class_IOU)
             total_F1.append(Class_F1score)
@@ -743,8 +1049,6 @@ if testing == True:
             total_recall.append(Class_recall)
             total_predict.append(Class_precision)
             # if 
-            save_stack_images = {'final_predict':pre_body,'final_la':v_la,
-                                'FINAL_input':_input}
             save_path=logger.save_images(save_stack_images,i)
 
     # logger.make_full_image(imagename='final_predict')

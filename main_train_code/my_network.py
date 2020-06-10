@@ -8,6 +8,7 @@ from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 
 import segmentation_models_pytorch as smp
 
+from torch.autograd import Variable
 
 # from resnet import *
 # from resnet import *
@@ -781,8 +782,9 @@ class Unet(nn.Module):
 #=====================================================================#
 
 class VGGBlock(nn.Module):
-    def __init__(self, in_channels, middle_channels, out_channels, act_func=nn.ReLU(inplace=True)):
+    def __init__(self, in_channels, middle_channels, out_channels, act_func=nn.ReLU(inplace=True),resblock=False):
         super(VGGBlock, self).__init__()
+        self.resblock = resblock
         self.act_func = act_func
         self.conv1 = nn.Conv2d(in_channels, middle_channels, 3, padding=1)
         self.bn1 = nn.BatchNorm2d(middle_channels)
@@ -790,15 +792,26 @@ class VGGBlock(nn.Module):
         self.bn2 = nn.BatchNorm2d(out_channels)
 
     def forward(self, x):
-        out = self.conv1(x)
-        out = self.bn1(out)
-        out = self.act_func(out)
+        if self.resblock == True:
+            out = self.conv1(x)
+            out = self.bn1(out)
+            out = self.act_func(out)
+            out = x+out
 
-        out = self.conv2(out)
-        out = self.bn2(out)
-        out = self.act_func(out)
-
-        return out
+            out2 = self.conv2(out)
+            out2 = self.bn2(out2)
+            out2 = self.act_func(out2)
+            out2 = out+out2
+        else:
+            out = self.conv1(x)
+            out = self.bn1(out)
+            out = self.act_func(out)
+            
+            out2 = self.conv2(out)
+            out2 = self.bn2(out2)
+            out2 = self.act_func(out2)
+           
+        return out2
 
 
 class NestedUNet(nn.Module):
@@ -877,6 +890,11 @@ def pretrain_unet(classnum):
 def pretrain_efficent_unet():
     return smp.Unet('efficientnet-b3',in_channels=1,classes=4,activation='softmax')
 
+import resnet_casenet 
+import resnet_casenet101
+def pretrain_casenet():
+    return resnet_casenet101.casenet101()
+
 class pretrain_deeplab_unet(nn.Module):
     def __init__(self,in_channels=1,classes=4,multi_output=False,plus = True):
         super(pretrain_deeplab_unet,self).__init__()
@@ -895,28 +913,41 @@ class pretrain_pspnet(nn.Module):
         return self.model(x)
 
 class refinenet(nn.Module):
-    def __init__(self,in_channels=1,classes=4,multi_output=False):
+    def __init__(self,in_channels=1,classes=4,multi_output=True):
         super(refinenet,self).__init__()
         self.model = smp.Unet('resnet34',in_channels=in_channels,classes=classes,activation='softmax',encoder_weights=None)
+        feature = [64,128,256,512]
+        self.multi_output = multi_output
         self.first    = single_conv(1,3) #1024
-        self.encoder0 = single_conv(3,64) #512
-        self.encoder1 = single_conv(64,64) #256
-        self.encoder2 = single_conv(64,128) #128
-        self.encoder3 = single_conv(128,256) #64
-        self.encoder4 = single_conv(256,512) #32
+        self.encoder0 = single_conv(3,feature[0]) #512
+        self.encoder1 = single_conv(feature[0],feature[0]) #256
+        self.encoder2 = single_conv(feature[0],feature[1]) #128
+        self.encoder3 = single_conv(feature[1],feature[2]) #64
+        self.encoder4 = single_conv(feature[2],feature[3]) #32
 
-
-        # self.model_0 = smp.Unet('resnet34',in_channels=64,classes=64,activation='softmax',encoder_weights=None)
-        self.model_1 = smp.Unet('resnet34',encoder_depth=4,in_channels=64,classes=64,activation='softmax',encoder_weights=None)
-        self.model_2 = smp.Unet('resnet34', encoder_depth=4,in_channels=128,classes=128,activation='softmax',encoder_weights=None)
-        self.model_3 = smp.Unet('resnet34', encoder_depth=4,in_channels=256,classes=256,activation='softmax',encoder_weights=None)
-        self.model_4 = smp.Unet('resnet34', encoder_depth=4,in_channels=512,classes=512,activation='softmax',encoder_weights=None)
+        self.model_0 = VGGBlock(feature[0],feature[0],feature[0],resblock=True)
+        self.model_1 = VGGBlock(feature[0],feature[0],feature[0],resblock=True)
+        self.model_2 = VGGBlock(feature[1],feature[1],feature[1],resblock=True)
+        self.model_3 = VGGBlock(feature[2],feature[2],feature[2],resblock=True)
+        self.model_4 = VGGBlock(feature[3],feature[3],feature[3],resblock=True)
         
+        # self.model_0 = smp.Unet('resnet34',in_channels=64,classes=64,activation='softmax',encoder_weights=None)
+        # self.model_1 = smp.Unet('resnet34',encoder_depth=4,in_channels=64,classes=64,activation='softmax',encoder_weights=None)
+        # self.model_2 = smp.Unet('resnet34', encoder_depth=4,in_channels=128,classes=128,activation='softmax',encoder_weights=None)
+        # self.model_3 = smp.Unet('resnet34', encoder_depth=4,in_channels=256,classes=256,activation='softmax',encoder_weights=None)
+        # self.model_4 = smp.Unet('resnet34', encoder_depth=4,in_channels=512,classes=512,activation='softmax',encoder_weights=None)
+        
+
         self.deconv5,self.deconv4,self.deconv3,self.deconv2,self.deconv1 = list(self.model.decoder.children())[1]
         self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
             
         self.finals = nn.Conv2d(32, classes, kernel_size=3,padding=1)
-
+        
+        self.finals_d2 = nn.Conv2d(feature[1], classes, kernel_size=3,padding=1)
+        self.finals_d1 = nn.Conv2d(feature[1]+feature[0], classes, kernel_size=3,padding=1)
+        self.finals_d0 = nn.Conv2d(feature[1]+feature[2], classes, kernel_size=3,padding=1)
+        
+        
         self.softmax = nn.Softmax(dim=1)
         # print(list(self.model.decoder.children())[1])
     def pre_forward(self,x):
@@ -925,50 +956,135 @@ class refinenet(nn.Module):
     def pre_forwardv2(self,x):
         e0 = self.first(x)
         # print(e0.shape)
-        feautre_size = x.shape[0,:]
+        # feautre_size = x.shape[0,:]
         e1 = F.avg_pool2d(self.encoder0(e0),2)
         e2 = F.avg_pool2d(self.encoder1(e1),2)
         e3 = F.avg_pool2d(self.encoder2(e2),2)
         e4 = F.avg_pool2d(self.encoder3(e3),2)
         e5 = F.avg_pool2d(self.encoder4(e4),2)
-        print(e0.shape,e1.shape,e2.shape,e3.shape,e4.shape,e5.shape)
+        
         return [e0,e1,e2,e3,e4,e5]
     
     def forward(self,x):
-        encoder_list =self.pre_forward(x)
+        encoder_list =self.pre_forwardv2(x)
         # print()
         # orch.Size([1, 64, 256, 256]) torch.Size([1, 128, 128, 128]) torch.Size([1, 256, 64, 64]) torch.Size([1, 512, 32, 32])
 # torch.Size([1, 3, 128, 128]) torch.Size([1, 64, 64, 64]) torch.Size([1, 64, 32, 32]) torch.Size([1, 128, 16, 16]) torch.Size([1, 256, 8, 8]) torch.Size([1, 512, 4, 4])
 
-        print(encoder_list[1].shape,encoder_list[2].shape,encoder_list[3].shape,encoder_list[4].shape,encoder_list[5].shape)
-        print(len(encoder_list))
+        # print(encoder_list[1].shape,encoder_list[2].shape,encoder_list[3].shape,encoder_list[4].shape,encoder_list[5].shape)
+        # print(len(encoder_list))
         encoder_list[2] = self.model_1(encoder_list[2])
         encoder_list[3] = self.model_2(encoder_list[3])
-        # encoder_list[4] = self.model_3(encoder_list[4])
-        # encoder_list[5] = self.model_4(encoder_list[5])
+        encoder_list[4] = self.model_3(encoder_list[4])
+        encoder_list[5] = self.model_4(encoder_list[5])
 
         
-        print(encoder_list[1].shape,encoder_list[2].shape,encoder_list[3].shape,encoder_list[4].shape,encoder_list[5].shape)
+        # print(encoder_list[1].shape,encoder_list[2].shape,encoder_list[3].shape,encoder_list[4].shape,encoder_list[5].shape)
         # print(list(self.model.decoder.children())[1])
         # print(encoder_list[5].shape)
         result = torch.cat([encoder_list[4],self.upsample(encoder_list[5])],1)
-        result = self.deconv5(result) 
-        print(result.shape)
-        result = torch.cat([encoder_list[3],result],1)
-        result = self.deconv4(result) 
+        d0 = self.deconv5(result) 
+        # print(result.shape)
+        d0 = torch.cat([encoder_list[3],d0],1)
+        d1 = self.deconv4(d0) 
         
-        
-        result = torch.cat([encoder_list[2],result],1)
-        result = self.deconv3(result)
+        d1 = torch.cat([encoder_list[2],d1],1)
+        d2 = self.deconv3(d1)
 
-        result = torch.cat([encoder_list[1],result],1)
+        d2 = torch.cat([encoder_list[1],d2],1)
         
-        result = self.deconv2(result)
-        result = self.finals(result)
+        d3 = self.deconv2(d2)
+        result = self.softmax(self.finals(d3))
+
+        if self.multi_output == True:
+            d0 = self.softmax(self.finals_d0(d0))
+            d1 = self.softmax(self.finals_d1(d1))
+            d2 = self.softmax(self.finals_d2(d2))
+            return [result,d2,d1,d0]
+        else:
+            return result
+
+class SideOutput(nn.Module):
+
+    def __init__(self, num_output, out_class=20,kernel_sz=None, stride=None):
+        super(SideOutput, self).__init__()
+        self.conv = nn.Conv2d(num_output, out_class, 1, stride=1, padding=0, bias=True)
+
+        if kernel_sz is not None:
+            self.upsample = True
+            self.upsampled = nn.Conv2d(out_class,out_class,3,padding=1)
+        else:
+            self.upsample = False
+
+    def forward(self, res, size):
+        side_output = self.conv(res)
+        side_output = self.upsampled(F.upsample(side_output,size=size))
+
+        return side_output
+
+class Res5Output(nn.Module):
+
+    def __init__(self, num_output=2048, out_class=20,kernel_sz=8, stride=8):
+        super(Res5Output, self).__init__()
+        self.conv = nn.Conv2d(num_output, out_class, 1, stride=1, padding=0)
+        # self.upsampled = nn.ConvTranspose2d(out_class, out_class, kernel_size=kernel_sz, stride=stride, padding=0)
+        # self.upsampled = nn.Upsample(size=(1024,1024),scale_factor=(2,2),mode='bilinear')
+        self.upsampled = nn.Conv2d(out_class,out_class,3,padding=1)
         
         
+    def forward(self, res,size):
+        res = self.conv(res)
+        res = self.upsampled(F.upsample(res,size=size))
+        return res
+
+class CASENet(nn.Module):
+    def __init__(self,in_channels=1,classes=4,multi_output=True):
+        super(CASENet,self).__init__()
+        self.model = smp.Unet('resnet50',in_channels=in_channels,classes=classes,activation='softmax',encoder_weights=None)
+        feature = [64,128,256,512]
+        feature = [64,128,256,512,1024,2048]
+        self.SideOutput_e5 = SideOutput(feature[5], kernel_sz=4, stride=2)
+        self.SideOutput_e4 = SideOutput(feature[3], kernel_sz=4, stride=2)
+        self.SideOutput_e3 = SideOutput(feature[2], kernel_sz=4, stride=2)
+        self.Res5Output_e0 = Res5Output(feature[0])
         
-        return result
+    def pre_forward(self,x):
+        return self.model.encoder.forward(x)
+    
+
+    def _sliced_concat(self, res1, res2, res3, res5, num_classes):
+        out_dim = num_classes * 4
+        out_tensor = Variable(torch.FloatTensor(res1.size(0), out_dim, res1.size(2), res1.size(3))).cuda()
+        for i in range(0, out_dim, 4):
+            class_num = 0
+            out_tensor[:, i, :, :] = res1[:, class_num, :, :]
+            out_tensor[:, i + 1, :, :] = res2[:, class_num, :, :]
+            out_tensor[:, i + 2, :, :] = res3[:, class_num, :, :]
+            out_tensor[:, i + 3, :, :] = res5[:, class_num, :, :]
+            class_num += 1
+
+        return out_tensor
+
+    def _fused_class(self, sliced_cat, groups):
+        in_channels = sliced_cat.size(1)
+        out_channels = sliced_cat.size(1)//groups
+        conv = nn.Conv2d(in_channels, out_channels, 1, groups=groups).cuda()
+        out = conv(sliced_cat).cuda()
+        return out
+        
+    def forward(self,x):
+        original_size = x.size()[2:]
+        encoders = self.pre_forward(x)
+        # print(len(encoders))
+        # print(encoders[5].shape,encoders[4].shape,encoders[3].shape,encoders[2].shape,encoders[1].shape)
+        encoders[5] = self.SideOutput_e5(encoders[5],original_size) # 512
+        encoders[4] = self.SideOutput_e4(encoders[3],original_size) # 256
+        encoders[3] = self.SideOutput_e3(encoders[2],original_size) # 128
+        encoders[2] = self.Res5Output_e0(encoders[1],original_size) # 64
+        
+        sliced_cat = self._sliced_concat(encoders[2], encoders[3], encoders[4], encoders[5], 4)
+        acts = self._fused_class(sliced_cat, 4)
+        return acts
 
 class classification_model(nn.Module):
     def __init__(self, n_classes=4):
@@ -1284,8 +1400,8 @@ class single_conv(nn.Module):
     def __init__(self,ch_in,ch_out):
         super(single_conv,self).__init__()
         self.conv = nn.Sequential(
-            nn.Conv2d(ch_in, ch_out, kernel_size=3,stride=1,padding=1,bias=True),
-            nn.BatchNorm2d(ch_out),
+            nn.Conv2d(ch_in, ch_out, kernel_size=3,stride=1,padding=1,bias=True)
+            ,nn.BatchNorm2d(ch_out),
             nn.ReLU(inplace=True)
         )
     # 

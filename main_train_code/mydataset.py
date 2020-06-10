@@ -15,80 +15,17 @@ from skimage.io import imsave
 from skimage.util.shape import view_as_blocks
 import cv2
 import custom_transform as tr
-
+import torch.nn.functional as F
 # set image smoothing
 from scipy.ndimage import gaussian_filter
-class mydataset_3d(Dataset):
-    def __init__(self,imageDir,labelDir,size,state=False):
-        img = glob.glob(imageDir +'*')
-        lab = glob.glob(labelDir +'*')
-
-        self.images = natsorted(img)[0:size]
-        self.labels = natsorted(lab)[0:size]
-
-        self.state = state
-
-        self.Flip = RandomFlip(np.random.RandomState())
-        self.Rotate90 = RandomRotate90(np.random.RandomState())
-        self.Rotate = RandomRotate(np.random.RandomState(), angle_spectrum=30)
-
-        self.L_transform = transforms.Lambda(lambda crops: torch.stack([transforms.ToTensor()(crop) for crop in crops]))
-        
-        print(len(img),len(lab))
-    def __len__(self):
-        return len(self.images)
-
-    def __getitem__(self,index):
-        
-        image = skimage.io.imread(self.images[index])
-        labels = skimage.io.imread(self.labels[index])
-
-        length=len(image)//4
-        
-        zero = np.zeros_like(image[0])
-        zero = np.expand_dims(zero, axis=0)
-
-        lab_zero = np.zeros_like(labels[0])
-        lab_zero = np.expand_dims(lab_zero, axis=0)
-        while len(image) < 25:
-            image = np.concatenate((image, zero),axis=0)
-            labels = np.concatenate((labels, lab_zero),axis=0)
-            
-        
-        stack_label = []
-        for label in labels:
-            gray_label = skimage.color.rgb2gray(label)
-
-            mask0= gray_label < 0.3
-            mask1= gray_label > 0.9
-            mask2= np.logical_and(0.3 < gray_label , gray_label < 0.4)
-            mask3=  np.logical_and(0.4 < gray_label , gray_label < 0.8)
-
-            gray_label[mask0] = 0
-            gray_label[mask1] = 1
-            gray_label[mask2] = 2
-            gray_label[mask3] = 3
-            stack_label.append(gray_label)
-        labels=np.array(stack_label).astype('uint8')
-
-        
-        if self.state==True:
-            image,labels = self.Flip(m = image,n = labels)
-            image,labels = self.Rotate90(m = image,n = labels)
-
-
-        clip = self.L_transform(image).permute(1,0,2,3)
-
-        
-        
-        return clip,labels
 
 class mydataset_2d(Dataset):
-    def __init__(self,imageDir,labelDir,usetranform=True,patchwise=True,threshold=0.1,phase='train',multichannel=False,isDir=True,preprocessing=True):
+    def __init__(self,imageDir,labelDir,usetranform=True,patchwise=True,threshold=0.1,phase='train',multichannel=False,isDir=True,preprocessing=True,multiple_scale=False):
         
         self.preprocessing = preprocessing
         self.multichannel = multichannel
         self.isDir = isDir
+        self.multiple_scale = multiple_scale
         if isDir == True:
             self.imageDir = imageDir
             self.labelDir = labelDir
@@ -106,8 +43,8 @@ class mydataset_2d(Dataset):
                 #set hard constraiant 
                 if self.preprocessing == True:
                     img = gaussian_filter(img, sigma=1)
-                    img_threshold = skimage.filters.threshold_yen(img)
-
+                    # img_threshold = skimage.filters.threshold_yen(img)
+                    img_threshold = skimage.filters.threshold_otsu(img)
                     img = (img > img_threshold) * img
 
                 # normalizedImg = np.zeros((1024, 1024))
@@ -144,21 +81,28 @@ class mydataset_2d(Dataset):
                         new_image.append(self.images[i])
                 self.images = np.array(new_image)
                 self.labels = np.array(new_label)
-                print(self.images.shape,'1111111111111111111111111')
+                print(self.images.shape,'1111111111111111111111111',self.images[0].dtype)
+            if self.images[0].dtype == 'uint8':
+                # self.L_transform = transforms.Compose([transforms.ToTensor(),
+                #                 transforms.Normalize([0.5], [0.5])])
+                self.L_transform = transforms.Lambda(lambda image: torch.tensor(np.array(image).astype(np.float32)).unsqueeze(0))
+                
+            elif self.images[0].dtype == 'uint16':
+                self.L_transform = transforms.Lambda(lambda image: torch.tensor(np.array(image).astype(np.float32)).unsqueeze(0))
+                # self.L_transform = transforms.Compose([
+                #                 transforms.Lambda(lambda image: torch.tensor(np.array(image).astype(np.float32)).unsqueeze(0)),
+                #                 transforms.Normalize([0.5], [0.5])])
         else:
             self.images = np.array(natsorted(glob.glob(imageDir+'*')))
             self.labels = np.array(natsorted(glob.glob(labelDir+'*')))
-
-        self.transform = transforms.Compose([tr.RandomHorizontalFlip()])
-        if images[0].dtype == 'uint8':
-            self.L_transform = transforms.Compose([transforms.ToTensor(),
-                            transforms.Normalize([0.5], [0.5])])
-        # elif images[0].dtype == 'uint16':
-        #     self.L_transform = transfroms.Compose([
-        #     transforms.Lambda(lambda image: torch.tensor(numpy.array(image).astype(numpy.float32)).unsqueeze(0)),
-        #     transforms.Normalize((0.5), (0.5))])
+            self.L_transform = transforms.Lambda(lambda image: torch.tensor(np.array(image).astype(np.float32)).unsqueeze(0))
+                
             # self.L_transform = transforms.Compose([transforms.ToTensor(),
-            #                     transforms.Normalize([0.5], [0.5])])
+            #     transforms.Normalize([0.5], [0.5])])
+        self.transform = transforms.Compose([tr.RandomHorizontalFlip()])
+
+            # self.L_transform = transforms.Compose([transforms.ToTensor(),
+                                # transforms.Normalize([0.5], [0.5])])
         
         self.usetranform = usetranform
 
@@ -231,12 +175,16 @@ class mydataset_2d(Dataset):
             label = skimage.color.rgb2gray(label)
             if self.preprocessing == True:
                 image = gaussian_filter(image, sigma=1)
-                img_threshold = skimage.filters.threshold_yen(image)
+                # img_threshold = skimage.filters.threshold_yen(image)
+                img_threshold = skimage.filters.threshold_otsu(image)
                 image = (image > img_threshold) * image
 
         image = np.array(image)
         label = np.array(label)
+        # print(image.dtype)
         
+
+        # print(image.dtype)
         #give label
         mask0= label < 0.3
         mask1= label > 0.9
@@ -248,7 +196,12 @@ class mydataset_2d(Dataset):
         label[mask2] = 2
         label[mask3] = 3
 
-
+        # mask_full = label >0.2
+        
+        # label[mask_full==0] = 0
+        # label[mask_full==1] = 1
+        # print(image.max(),'211')
+        
         if self.usetranform == 'train':
             toPIL = transforms.ToPILImage()
             image = toPIL(image)
@@ -259,14 +212,27 @@ class mydataset_2d(Dataset):
                 angle = random.randint(0, 3)
                 roate = tr.RandomRotate(angle*90)
                 image,label = roate([image,label])
-                
+        # print(image.max(),'111')
         # image = image.convert('rgb')
         # print(image.dtype)
-        if image.dtype == 'uint16':
-            self.L_transform = transforms.Compose([
-                transforms.Lambda(lambda image: torch.from_numpy(np.array(image).astype(np.float32)).unsqueeze(0)),
-                transforms.Normalize([0.5], [0.5])])
-        clip = self.L_transform(image)
+        if self.isDir == False:
+            if image.dtype == 'uint16':
+                self.L_transform = transforms.Lambda(lambda image: torch.tensor(np.array(image).astype(np.float32)).unsqueeze(0))
+                
+                clip = self.L_transform(image)
+            elif image.dtype=='uint8':
+                self.L_transform = transforms.Compose([transforms.ToTensor(),
+                                transforms.Normalize([0.5], [0.5])])
+                clip = self.L_transform(image)
+
+        else:
+            # print(image.dtype,image.shape)
+        
+            # self.L_transform = transforms.Compose([
+            #     transforms.Lambda(lambda image: torch.tensor(np.array(image).astype(np.float32)).unsqueeze(0)),
+            #     transforms.Normalize((0.5), (0.5))])
+            clip = self.L_transform(image)
+        # print(clip.max(),'311')
         label = np.array(label)
         if self.multichannel == True:
             back_lable = np.where(label==0,np.ones_like(label),np.zeros_like(label))
@@ -275,144 +241,15 @@ class mydataset_2d(Dataset):
             axon_lable = np.where(label==3,np.ones_like(label),np.zeros_like(label))
             label = [back_lable, body_lable,dend_lable,axon_lable]
         label = np.array(label).astype('float32')
+
+        if self.multiple_scale == True:
+            size = image.shape[0] * 2
+            # print(size *4)
+            # image = skimage.transform.resize(image,(size,size)).astype('uint16') 
+            # print(clip.shape,label.shape)
+            clip = F.interpolate(clip.unsqueeze(1), (size,size))[:,0] 
+            
+            label = skimage.transform.resize(label,(size,size))
+            # print(clip.shape,label.shape)
         # print(clip.dtype)
         return clip,label
-
-class prjection_mydataset(Dataset):
-    def __init__(self,imageDir,labelDir,usetranform=True,kfold_cross=True):
-        
-        if kfold_cross == True:
-            self.images = imageDir
-            self.labels = labelDir
-            
-        elif kfold_cross == False: 
-            img = glob(imageDir +'*')
-            lab = glob(labelDir +'*')
-
-            self.images = natsorted(img)
-            self.labels = natsorted(lab)
-
-        self.transform = transforms.Compose([tr.RandomHorizontalFlip()])
-        self.L_transform = transforms.Compose([transforms.ToTensor(),
-                                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))])
-        self.usetranform = usetranform
-
-        print(len(self.images),len(self.labels))
-    
-    def __len__(self):
-        return len(self.images)
-    
-    def __getitem__(self,index):
-        
-        image = skimage.io.imread(self.images[index])
-        label = skimage.io.imread(self.labels[index])
-
-        image = np.array(image).astype('uint8')
-        label = np.array(label)
-
-        label = np.max(label,axis=0).astype('uint8')
-        label2 = skimage.color.rgb2gray(label)
-        
-        #give label
-        mask0= label2 < 0.3
-        mask1= label2 > 0.9
-        mask2= (label2 >0.3) & (label2 < 0.4)
-        mask3= (label2 >0.4) & (label2 < 0.8) 
-
-        label2[mask0] = 0
-        label2[mask1] = 1
-        label2[mask2] = 2
-        label2[mask3] = 3
-        image= np.max(image, axis=0)
-        image = skimage.color.gray2rgb(image)
-        if self.usetranform == 'train':
-            toPIL = transforms.ToPILImage()
-            image = toPIL(image.astype('uint8'))
-            label2 = toPIL(label2.astype('uint8'))
-            # image = image.convert('rgb')
-            image,label2 = t_transform([image,label2])
-            if random.random() > 0.5:        
-                angle = random.randint(0, 3)
-                roate = tr.RandomRotate(angle*90)
-                image,label2 = roate([image,label2])
-                
-        # image = image.convert('rgb')
-
-        clip = self.L_transform(image)
-        label2 = np.array(label2)
-
-        return clip,label2
-
-class nested_mydataset(Dataset):
-    def __init__(self,imageDir,labelDir,usetranform=True,kfold_cross=True):
-        if kfold_cross == False:
-            img = glob.glob(imageDir +'*')
-            lab = glob.glob(labelDir +'*')
-
-            self.images = natsorted(img)
-            self.labels = natsorted(lab)
-
-        if kfold_cross == True: 
-            self.images = imageDir
-            self.labels = labelDir
-
-        self.transform = transforms.Compose([tr.RandomHorizontalFlip()])
-        self.L_transform = transforms.Compose([transforms.ToTensor(),
-                                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))])
-        self.usetranform = usetranform
-
-        print(len(self.images),len(self.labels))
-    def __len__(self):
-        return len(self.images)
-    
-    def __getitem__(self,index):
-        
-        image = skimage.io.imread(self.images[index])
-        label = skimage.io.imread(self.labels[index])
-
-        image = np.array(image).astype('uint8')
-        label = np.array(label)
-
-        label = np.max(label,axis=0).astype('uint8')
-        label2 = skimage.color.rgb2gray(label)
-        
-        #give label
-        mask0= label2 < 0.3
-        mask1= label2 > 0.9
-        mask2= (label2 >0.3) & (label2 < 0.4)
-        mask3= (label2 >0.4) & (label2 < 0.8) 
-
-        label2[mask0] = 0
-        label2[mask1] = 1
-        label2[mask2] = 2
-        label2[mask3] = 3
-        image= np.max(image, axis=0)
-        image = skimage.color.gray2rgb(image)
-        if self.usetranform == 'train':
-            toPIL = transforms.ToPILImage()
-            image = toPIL(image.astype('uint8'))
-            label2 = toPIL(label2.astype('uint8'))
-            # image = image.convert('rgb')
-            image,label2 = t_transform([image,label2])
-            if random.random() > 0.5:        
-                angle = random.randint(0, 3)
-                roate = tr.RandomRotate(angle*90)
-                image,label2 = roate([image,label2])
-                
-        # image = image.convert('rgb')
-
-        clip = self.L_transform(image)
-        label2 = np.array(label2)
-
-        return clip,label2
-
-
-# class kfold_dataset(Dataset):
-#     def __init__(self,imageDir):
-#         data = glob.glob(imageDir+'*')
-
-#         self.data = natsorted(data)
-
-#     def __len__(self):
-#         return len(self,self.data)
-        
