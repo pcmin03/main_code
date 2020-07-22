@@ -26,19 +26,25 @@ from HED import HED
 from RCF import RCF
 
 from fusenet import ICNet 
+
+# from DenseCRFLoss import DenseCRFLoss
+from custom_transforms import denormalizeimage
+
 parser = argparse.ArgumentParser(description='Process some integers')
 parser.add_argument('--knum', help='Select Dataset')
-parser.add_argument('--gpu', help='comma separated list of GPU(s) to use.')
+parser.add_argument('--gpu', default=0,help='comma separated list of GPU(s) to use.',type=int)
 parser.add_argument('--weight_decay',default=0.001,help='set weight_decay',type=float)
 parser.add_argument('--weight',help='set Adaptive weight',type=float)
-parser.add_argument('--start_lr',default=1e-4, help='set of learning rate', type=float)
-parser.add_argument('--end_lr',default=1e-6,help='set fo end learning rate',type=float)
+parser.add_argument('--start_lr',default=7e-2, help='set of learning rate', type=float)
+parser.add_argument('--end_lr',default=7e-3,help='set fo end learning rate',type=float)
 parser.add_argument('--paralle',default=False,help='GPU paralle',type=bool)
 parser.add_argument('--scheduler',default='Cosine',help='select schduler method',type=str)
 parser.add_argument('--epochs',default=201,help='epochs',type=int)
 parser.add_argument('--out_class',default=4,help='set of output class',type=int)
 parser.add_argument('--changestep',default=20,help='change train to valid',type=int)
 parser.add_argument('--pretrain',default=False,help='load pretrained',type=bool)
+
+
 # parser.add_argument('--batch',defalut=110,help='set Adaptive weight',type=int)_
 args = parser.parse_args()
 
@@ -65,47 +71,55 @@ print(knum,'=============')
 foldnum = 10
 betavalue = 2
 phase = 'train'
-model = 'unet'
+model = 'class_unet'
 data_name = 'uint16'
+save_name = 'seg_'
+name = save_name+str(int(args.weight))+'_'+str(data_name)+'_'
 
-# name = "Adaptive_Full_image_weight"+str(args.weight)
-# name = "Adaptive_Full_image_RMSE"
+# name = 'Adaptive_Full_4_image_scribble1000_scribble_'
+# name = "Adaptive_Full_4_image_weight"+str(args.weight)
+# name = "Adaptive_Full_4_image_RMSE"
 # name = "Adpative_at0tention_module"+str(args.weight)
 # name = "neworiginalv7"+str(data_name)
-name = "neworiginalv3"+str(data_name)
+# name = "neworiginalv8_boundary_v3_"+str(data_name)
+# name = "Adaptive_Full_4_image_skeletonsize"+str(int(args.weight))+'_'+str(data_name)+'_'
+
+# name = "Adaptive_Full_4_image_scribble"+str(int(args.weight))+'_'+str(data_name)+'_'
+# name = "Adaptive_Full_4_image_class_loss"+str(int(args.weight))+'_'+str(data_name)+'_'
+
 # name = "neworiginal"
 # neworiginalv3
 # unetmodel8neworiginal
-# name = Adaptive_Full_image_gaussian_AdaptiveCE_V21000.0_uint16_
-# name = "Adaptive_Full_image_AdaptiveCE_"+str(int(args.weight))+'_'+str(data_name)+'_'
-# name = "New_Adaptive_Full_image_AdaptiveCE_dend_"+str(int(args.weight))+'_'+str(data_name)+'_'
-# name = "New_Adaptive_Full_image_AdaptiveCE_full_v2"+str(int(args.weight))+'_'+str(data_name)+'_'
+# name = Adaptive_Full_4_image_gaussian_AdaptiveCE_V21000.0_uint16_
+# name = "Adaptive_Full_4_image_AdaptiveCE_"+str(int(args.weight))+'_'+str(data_name)+'_'
+# name = "New_Adaptive_Full_4_image_AdaptiveCE_dend_"+str(int(args.weight))+'_'+str(data_name)+'_'
+# name = "New_Adaptive_Full_4_image_AdaptiveCE_full_4_v2"+str(int(args.weight))+'_'+str(data_name)+'_'
 
-# name = "Adaptive_Full_image_AdaptiveCE_"+str(int(args.weight))
-# name = "Adaptive_Full_image_AdaptiveCE_Multiloss"+str(int(args.weight))+'_'+str(data_name)+'_'
+# name = "Adaptive_Full_4_image_AdaptiveCE_"+str(int(args.weight))
+# name = "Adaptive_Full_4_image_AdaptiveCE_Multiloss"+str(int(args.weight))+'_'+str(data_name)+'_'
 
-# name = "Adaptive_Full_image_class_AdaptiveCE_v2"+str(args.weight)
-# name  =  "Adaptive_Full_image_gaussian_AdaptiveCE_V3"+str(args.weight)+'_'+str(data_name)+'_'
-# name  =  "Adaptive_Full_image_class_gaussian_AdaptiveCE_V3"+str(args.weight)+'_'+str(data_name)+'_'
-# unetmodel/unetmodel8Adaptive_Full_image_gaussian_AdaptiveCE_V2_uint161000.0/
-# name  =  "Adaptive_Full_image_gaussian_AdaptiveCE_V2"+str(args.weight)+'_'+str(data_name)+'_'
-# unetmodel8New_Adaptive_Full_image_AdaptiveCE_full_v21000_uint16_
-# name = "Adaptive_Full_image_gaussian_AdaptiveCE_V2_"+str(data_name)+str(args.weight)
-# unetmodel8New_Adaptive_Full_image_AdaptiveCE_full_v21000_uint16_/
-# name = "New_Adaptive_Full_image_AdaptiveCE_full_v2"+str(int(args.weight))+'_'+str(data_name)+'_'
-# name  =  "Adaptive_Full_image_gaussian_AdaptiveCE_V2"'_'+str(data_name)+str(args.weight)
-# name = 'Adaptive_Full_image_gaussian_AdaptiveCE_V210003.0_uint16_'
-# name  =  "Adaptive_Full_image_gaussian_AdaptiveCE_V2_up_"+str(args.weight)+'_'+str(data_name)+'_'
-# name  =  "Adaptive_Full_image_gaussian_AdaptiveCE_V2_uint16"+str(args.weight)
+# name = "Adaptive_Full_4_image_class_AdaptiveCE_v2"+str(args.weight)
+# name  =  "Adaptive_Full_4_image_gaussian_AdaptiveCE_V3"+str(args.weight)+'_'+str(data_name)+'_'
+# name  =  "Adaptive_Full_4_image_class_gaussian_AdaptiveCE_V3"+str(args.weight)+'_'+str(data_name)+'_'
+# unetmodel/unetmodel8Adaptive_Full_4_image_gaussian_AdaptiveCE_V2_uint161000.0/
+# name  =  "Adaptive_Full_4_image_gaussian_AdaptiveCE_V2"+str(args.weight)+'_'+str(data_name)+'_'
+# unetmodel8New_Adaptive_Full_4_image_AdaptiveCE_full_4_v21000_uint16_
+# name = "Adaptive_Full_4_image_gaussian_AdaptiveCE_V2_"+str(data_name)+str(args.weight)
+# unetmodel8New_Adaptive_Full_4_image_AdaptiveCE_full_4_v21000_uint16_/
+# name = "New_Adaptive_Full_4_image_AdaptiveCE_full_4_v2"+str(int(args.weight))+'_'+str(data_name)+'_'
+# name  =  "Adaptive_Full_4_image_gaussian_AdaptiveCE_V2"'_'+str(data_name)+str(args.weight)
+# name = 'Adaptive_Full_4_image_gaussian_AdaptiveCE_V210003.0_uint16_'
+# name  =  "Adaptive_Full_4_image_gaussian_AdaptiveCE_V2_up_"+str(args.weight)+'_'+str(data_name)+'_'
+# name  =  "Adaptive_Full_4_image_gaussian_AdaptiveCE_V2_uint16"+str(args.weight)
 
-# name = "remove_background_Adaptive_Full_image_gaussian_AdaptiveCE_V2"+str(args.weight)
-# name = "Adaptive_Full_image_class_AdaptiveCE_"+str(args.weight)
-# name = "Adaptive_Full_image_AdaptiveCE_distacemap"+str(args.weight)
+# name = "remove_background_Adaptive_Full_4_image_gaussian_AdaptiveCE_V2"+str(args.weight)
+# name = "Adaptive_Full_4_image_class_AdaptiveCE_"+str(args.weight)
+# name = "Adaptive_Full_4_image_AdaptiveCE_distacemap"+str(args.weight)
 
-# name = "Adaptive_Full_image_CustomCE_"+str(args.weight)
+# name = "Adaptive_Full_4_image_CustomCE_"+str(args.weight)
 
-# name = "Adaptive_Full_image_CE_Scehduler"+str(args.weight)
-# name = "Adaptive_Full_image_custom_CE"+str(args.weight)
+# name = "Adaptive_Full_4_image_CE_Scehduler"+str(args.weight)
+# name = "Adaptive_Full_4_image_custom_CE"+str(args.weight)
 # name = "Custom_Adaptive_DistanceMap"+str(args.weight)
 # name = "Custom_Adaptive_apply_DistanceMap"+str(args.weight)
 # name = "Adaptive_CE"+str(args.weight)
@@ -123,7 +137,7 @@ deleteall = False
 patchwise = False
 multichannel = False
 multi_ = False
-preprocessing_ = False
+preprocessing_ = True
 multiple_scale = False
 
 #set data path 
@@ -150,7 +164,18 @@ elif data_name == 'edge':
     imageDir= '../AIAR_orignal_data/train_project_image/'
     labelDir = '../AIAR_orignal_data/train_boundary_label/'
     #edge dataset test
-    testDir= '../AIAR_orignal_data/train_project_image/'
+    testDir= '../AIAR_orignal_data/test_project_image/'
+    tlabelDir = '../AIAR_orignal_data/test_boundary_label/'
+    
+elif data_name == 'scribble':
+    #edge dataset train
+    # imageDir= '../AIAR_orignal_data/train_project_image/'
+    imageDir= '../new_project_original_image/'
+    labelDir = '../AIAR_orignal_data/train_scribble_project_label/'
+    full_4_labelDir = '../AIAR_orignal_data/train_project_label/'
+    #edge dataset test
+    # testDir= '../AIAR_orignal_data/test_project_image/'
+    testDir ='../test_image/'
     tlabelDir = '../AIAR_orignal_data/test_boundary_label/'
 
 
@@ -173,11 +198,11 @@ def weights_init(m):
             torch.nn.init.constant_(m.weight, 0.2)
         if m.bias is not None:
             m.bias.data.zero_()
-
+from Wnet.models import WNet
 #image segmentation 
 if model =='unet':
-    batch_size = 100
-    gen = pretrain_unet(4).to(device)
+    batch_size = 120
+    gen = pretrain_unet(3,5).to(device)
 
 elif model=='res_unet':
     batch_size = 22
@@ -217,7 +242,7 @@ elif model == 'AttU_Net':
 
 elif model == 'efficient_nestunet':
     batch_size = 30
-    gen = efficient_nestunet(1,4).to(device)
+    gen = efficient_nestunet(1,5).to(device)
 
 elif model == 'Multi_Unet':
     batch_size = 30
@@ -228,7 +253,7 @@ elif model == 'DANET':
     gen = DANet().to(device)
 #boundray detection
 elif model == 'CASENet':
-    batch_size = 15
+    batch_size = 18
     gen = pretrain_casenet().to(device)
 
 elif model == 'HED':
@@ -243,14 +268,16 @@ elif model == 'RCF' :
     eval_channel = int(2)
     classnum = int(2)
 
-    
-    
+elif model == 'WNet':
+    batch_size = 15
+    gen = WNet().to(device)
 
-
-
+elif model == 'class_unet':
+    batch_size = 85
+    gen = clas_pretrain_unet(1,4).to(device)
 #set paralle
 if paralle == True:
-    gen = torch.nn.DataParallel(gen, device_ids=[0,1])
+    gen = torch.nn.DataParallel(gen, device_ids=[0,1,2,3])
 
 if deleteall==True:
     logger = Logger(path,batch_size=batch_size,delete=deleteall,num=str(knum),name=model+name)
@@ -362,14 +389,29 @@ def compute_gradient_penalty(D, real_samples, fake_samples):
     gradients = gradients.view(gradients.size(0), -1)
     gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
     return gradient_penalty
+
+
+# densecrflosslayer = DenseCRFLoss(weight=4e-9, sigma_rgb=15, sigma_xy=100, scale_factor=0.5)
+# print(densecrflosslayer)
+    
+    
+
 #set loss
 # criterion = Custom_CE(int(args.weight),Gaussian=True).to(device)
 # criterion = Custom_Adaptive_Gaussian_DistanceMap(int(args.weight),True).to(device)
 # criterion = Custom_dend_Adaptive_Gaussian_DistanceMap(int(args.weight),True).to(device)
 
 # criterion = Custom_WeightedCrossEntropyLossV2().to(device)
+criterion = nn.CrossEntropyLoss()
+classificaiton_loss = nn.BCEWithLogitsLoss()
+# from configure import Config
 
-criterion = Custom_WeightedCrossEntropyLossV2().to(device)
+# from DataLoader import DataLoader
+# from Wnet.Ncuts import NCutsLoss, cal_weight
+
+# criterion = NCutsLoss()
+
+# criterion = Custom_WeightedCrossEntropyLossV2().to(device)
 # criterion = MultiLLFunction().to(device)
 
 # criterion = cross_entropy_loss().to(device)
@@ -382,11 +424,8 @@ print(1/(1+int(args.weight)),'1111')
 evaluator = Evaluator(eval_channel)
 inversevaluator = Evaluator(eval_channel)
 
-vevaluator = Evaluator(eval_channel)
-inversvevaluator = Evaluator(eval_channel)
-
-
 image,labels = divide_kfold(imageDir,labelDir,k=foldnum,name='test')
+
 train_num, test_num = 'train'+str(knum), 'test'+str(knum)
 # image_valid = image[train_num][-3:]
 # label_valid = labels[train_num][-3:]
@@ -395,6 +434,18 @@ image_train = image[train_num]
 label_train = labels[train_num]
 image_valid = image[test_num]
 label_valid = labels[test_num]
+
+def make_batch(dataset):
+    inputs = [dataset for sample in samples]
+    labels = [dataset for sample in samples]
+    padded_inputs = torch.nn.utils.rnn.pad_sequence(inputs, batch_first=True)
+    return {'input': padded_inputs.contiguous(),
+            'label': torch.stack(labels).contiguous()}
+
+if data_name == 'scribble':
+    image,full_4_labels = divide_kfold(imageDir,full_4_labelDir,k=foldnum,name='test')
+    ful_label_train = full_4_labels[train_num]
+    ful_label_valid = full_4_labels[test_num]
 
 if trainning == True:
     if load_pretrain == True:
@@ -406,24 +457,40 @@ if trainning == True:
         
     if cross_validation == True:
         print(f"{image_valid},{label_valid}")
-        print(f"{image[train_num]},{labels[train_num]}")
-        MyDataset = {'train': DataLoader(mydataset_2d(image_train,label_train,patchwise=patchwise,multichannel=multichannel,preprocessing=preprocessing_,multiple_scale=multiple_scale),
-                                        batch_size, 
-                                        shuffle = True,
-                                        num_workers = num_workers),
-                    'valid' : DataLoader(mydataset_2d(image_valid,label_valid,False,patchwise=patchwise,phase='test',multichannel=multichannel,preprocessing=preprocessing_,multiple_scale=multiple_scale),
-                                        1, 
-                                        shuffle = False,
-                                        num_workers = num_workers)}
 
+        if data_name == 'scribble':
+            MyDataset = {'train' : DataLoader(mydataset_2d_scribble(image_valid,label_valid,ful_label_valid,False,patchwise=patchwise,
+                                            phase='train',multichannel=multichannel,preprocessing=preprocessing_,multiple_scale=multiple_scale),
+                                            1, 
+                                            shuffle = False,
+                                            num_workers = num_workers),
+
+                        'valid' : DataLoader(DataLoader(image_valid,label_valid,ful_label_valid,False,patchwise=patchwise,
+                                            phase='test',multichannel=multichannel,preprocessing=preprocessing_,multiple_scale=multiple_scale),
+                                            1, 
+                                            shuffle = False,
+                                            num_workers = num_workers)}
+        else : 
+            MyDataset = {'train': DataLoader(mydataset_2d(image_train,label_train,patchwise=patchwise,phase='train',multichannel=multichannel,preprocessing=True,multiple_scale=multiple_scale),
+                                batch_size, 
+                                shuffle = True,
+                                num_workers = num_workers),
+                'valid' : DataLoader(mydataset_2d(image_valid,label_valid,False,patchwise=False,phase='test',multichannel=multichannel,preprocessing=False,multiple_scale=multiple_scale),
+                                    1, 
+                                    shuffle = False,
+                                    num_workers = num_workers)}
     print("start trainning!!!!")
     for epoch in range(epochs):
-        
+        evaluator.reset()
+        inversevaluator.reset()
+        seg_loss = 0
+        cls_loss = 0
+        t_loss = 0
+        avg_IOU =0 
+        avg_F1 = 0
         if epoch %changestep == 0:
             phase = 'valid'
             gen.eval()            
-            vevaluator.reset()
-            inversvevaluator.reset()
             total_IOU = []
             total_F1 = []
             total_Fbeta = []
@@ -435,11 +502,10 @@ if trainning == True:
             inversetotal_Fbeta = []
             inversetotal_recall = []
             inversetotal_predict = []
+
         else : 
             phase = 'train'
             gen.train()  
-            evaluator.reset()
-            inversevaluator.reset()
             if discrim == True:
                 dis.train()
 
@@ -448,312 +514,185 @@ if trainning == True:
         for i, batch in enumerate(tqdm.tqdm(MyDataset[phase])):
             
             _input, _label = Variable(batch[0]).to(device), Variable(batch[1]).to(device)
+            class_label = Variable(batch[2]).to(device)
             
-            if phase == 'train':
-                optimizerG.zero_grad()
-                torch.autograd.set_detect_anomaly(True)
+            
+            optimizerG.zero_grad()
+            torch.autograd.set_detect_anomaly(True)
 
-                if deepsupervision==True and model == 'nest_unet':   
-                    
-                    loss = 0
-                    
-                    back,body,dend,axon = gen(_input)
-                    
-                    gt=_label
-                    # back_label = torch.where(gt==0,torch.ones_like(gt),torch.zeros_like(gt)).view(-1,).float()
-                    # body_label = torch.where(gt==1,torch.ones_like(gt),torch.zeros_like(gt)).view(-1,).float()
-                    # dend_label = torch.where(gt==2,torch.ones_like(gt),torch.zeros_like(gt)).view(-1,).float()
-                    # axon_label = torch.where(gt==3,torch.ones_like(gt),torch.zeros_like(gt)).view(-1,).float()
+            if deepsupervision==True and model == 'nest_unet':   
+                
+                loss = 0
+                
+                back,body,dend,axon = gen(_input)
+                
+                gt=_label
+                predict = torch.cat((back, body,dend,axon),dim=1).cuda().float()
+                
+                back_loss = criterion(predict,_label.long())
 
-                    predict = torch.cat((back, body,dend,axon),dim=1).cuda().float()
+                CE_loss = back_loss
+                seg_loss_body = CE_loss 
+                seg_loss_body.backward(retain_graph = True)
+                
+                optimizerG.step()
+                
+                evaluator.add_batch(_label.cpu().numpy(),torch.argmax(predict,dim=1).cpu().numpy())
+                IOU,Class_IOU,wo_back_MIoU = evaluator.Mean_Intersection_over_Union()
+                Class_precision, Class_recall,Class_F1score = evaluator.Class_F1_score()
+                _, _,Class_Fbetascore = evaluator.Class_Fbeta_score(beta=betavalue)                    
                     
-                    back_loss = criterion(predict,_label)
-                    # body_loss = criterion1(torch.sigmoid(body.view(-1,)),body_label)
-                    # dend_loss = criterion2(torch.sigmoid(dend.view(-1,)),dend_label)
-                    # axon_loss = criterion3(torch.sigmoid(axon.view(-1,)),axon_label)
-
-                    # CE_loss = (back_loss+body_loss+dend_loss+axon_loss)/4
-                    CE_loss = back_loss
+            else :
+                ##### train with source code #####
+                with torch.set_grad_enabled(phase == 'train'):
+                    predict,pred_class=gen(_input,phase)
+                    precision =predict
+                
+                if classnum == 8:
+                    CE_loss = criterion(predict,_label)
+                    inversevaluator.add_batch(_label.cpu().numpy(),torch.argmax(predict[:,5:8],dim=1).cpu().numpy())
+                    _,inverseClass_IOU,_ = inversevaluator.Mean_Intersection_over_Union()
+                    inverseClass_precision, inverseClass_recall,inverseClass_F1score = inversevaluator.Class_F1_score()
+                    _, _,inverseClass_Fbetascore = inversevaluator.Class_Fbeta_score(beta=betavalue)
+                    CE_loss = criterion(predict,_label)
                     seg_loss_body = CE_loss 
                     seg_loss_body.backward(retain_graph = True)
-                    
                     optimizerG.step()
-                    
-                    evaluator.add_batch(_label.cpu().numpy(),torch.argmax(predict,dim=1).cpu().numpy())
-                    IOU,Class_IOU,wo_back_MIoU = evaluator.Mean_Intersection_over_Union()
-                    Class_precision, Class_recall,Class_F1score = evaluator.Class_F1_score()
-                    _, _,Class_Fbetascore = evaluator.Class_Fbeta_score(beta=betavalue)                    
-                        
-                    #
-                else :
-                    ##### train with source code #####
-                    predict=gen(_input)
-                    precision =predict
-                    if classnum == 8:
-                        CE_loss = criterion(predict,_label)
-                        inversevaluator.add_batch(_label.cpu().numpy(),torch.argmax(predict[:,5:8],dim=1).cpu().numpy())
-                        _,inverseClass_IOU,_ = inversevaluator.Mean_Intersection_over_Union()
-                        inverseClass_precision, inverseClass_recall,inverseClass_F1score = inversevaluator.Class_F1_score()
-                        _, _,inverseClass_Fbetascore = inversevaluator.Class_Fbeta_score(beta=betavalue)
-                        CE_loss = criterion(predict,_label)
-                        seg_loss_body = CE_loss 
-                        seg_loss_body.backward(retain_graph = True)
-                        optimizerG.step()
-                    
-                    else:
+                
+                else:
 
-                        if model == 'DANET' or model == 'multi_net' or model == 'refinenet':
-                            CE_loss1 = criterion(predict[0],_label)
-                            CE_loss2,_ = criterion(predict[1],_label,upsample=True)
-                            CE_loss3,_ = criterion(predict[2],_label,upsample=True)
-                            CE_loss4,_ = criterion(predict[3],_label,upsample=True)
-                            CE_loss = (CE_loss1 + CE_loss2 + CE_loss3 + CE_loss4)
-                            if multiple_scale == True:
-                                predict[0] = F.interpolate(predict[0], predict[1].size()[2:])
-                                _label = F.interpolate(_label.unsqueeze(1), predict[1].size()[2:])[:,0]
-                                predict = predict[0]
-                            elif multiple_scale == False:
-                                predict = predict[0]
+                    if model == 'DANET' or model == 'multi_net' or model == 'refinenet':
+                        CE_loss1 = criterion(predict[0],_label)
+                        CE_loss2,_ = criterion(predict[1],_label,upsample=True)
+                        CE_loss3,_ = criterion(predict[2],_label,upsample=True)
+                        CE_loss4,_ = criterion(predict[3],_label,upsample=True)
+                        CE_loss = (CE_loss1 + CE_loss2 + CE_loss3 + CE_loss4)
+                        if multiple_scale == True:
+                            predict[0] = F.interpolate(predict[0], predict[1].size()[2:])
+                            _label = F.interpolate(_label.unsqueeze(1), predict[1].size()[2:])[:,0]
+                            predict = predict[0]
+                        elif multiple_scale == False:
+                            predict = predict[0]
+                    else :
+                        # CE_loss = criterion(predict[0],_label)
+                        if model == 'HED' or model == 'RCF' :
+                            CE_loss = torch.zeros(1).cuda()
+                            for o in predict:
+                                CE_loss += criterion(o,_label)
+                            # CE_loss = CE_loss / len(predict)
+                            predict = predict[0]
+
+                        elif model == 'WNet':
+                            sw = _label.sum(-1).sum(-1)
+                            pred,pad_pred = gen(_input)
+                            ncuts_loss = criterion(pred,pad_pred,_label,sw)
+                            ncuts_loss = ncuts_loss.sum()/batch_size
+                            Ave_Ncuts = (Ave_Ncuts * i + ncuts_loss.item())/(i+1)
+                            CE_loss = ncuts_loss
+
                         else :
-                            # CE_loss = criterion(predict[0],_label)
-                            if model == 'HED' or model == 'RCF' or model == 'CASENet':
-                                CE_loss = torch.zeros(1).cuda()
-                                for o in predict:
-                                    CE_loss += criterion(o,_label)
-                                CE_loss = CE_loss / len(predict)
-                                predict = predict[0]
+                            CE_loss = criterion(predict,_label.long())
+                                
+                            if phase == 'train':
+                                class_loss = CE_loss                            
+                                # classificaiton_loss(pred_class,class_label)
+                                loss = CE_loss + class_loss
+                            else : 
+                                class_loss = CE_loss
+                                loss = CE_loss + class_loss
+                            # target_vars = list()
+                            # new_class =torch.zeros_like(pred_class)
+                            # for i in range(len(_label)):
+                            #     new_class[i] = Variable(torch.unique(_label[i]))
 
-                            else :
-                                CE_loss = criterion(predict,_label)
-
-                            # CE_loss += criterion(predict[1],_label)
+                            # print(class_label.shape,pred_class.shape,'11')
+                            #  
                             
-                        # dice_loss = criterion_v2(predict,_label)
+                            
+                            if data_name =='scribble':
+                                softmax = nn.Softmax(dim=1)
+                                probs = softmax(predict)
+                                croppings = (_label!=254).float()
+                                denormalized_image = denormalizeimage(_input, mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))
+                                densecrfloss = densecrflosslayer(denormalized_image,probs,croppings)
+                                densecrfloss = densecrfloss.cuda()
+                                loss = CE_loss + densecrfloss
+                            
+                    
+                    if discrim == True:
+                        optimizerD.zero_grad()
                         
-                        if discrim == True:
-                            optimizerD.zero_grad()
-                            
-                            real_val = dis(torch.argmax(predict,dim=1).unsqueeze(1).float())
-                            fake_val = dis(_label.unsqueeze(1).float())
+                        real_val = dis(torch.argmax(predict,dim=1).unsqueeze(1).float())
+                        fake_val = dis(_label.unsqueeze(1).float())
 
-                            #gradient penalty & WGAN adversarial loss
-                            
-                            GP = compute_gradient_penalty(dis, _label.unsqueeze(1).float(), torch.argmax(predict,dim=1).unsqueeze(1).float())
-                            d_loss = -torch.mean(real_val) + torch.mean(fake_val) + 10 * GP
+                        #gradient penalty & WGAN adversarial loss
+                        
+                        GP = compute_gradient_penalty(dis, _label.unsqueeze(1).float(), torch.argmax(predict,dim=1).unsqueeze(1).float())
+                        d_loss = -torch.mean(real_val) + torch.mean(fake_val) + 10 * GP
 
+                        if phase == 'train':
                             d_loss.backward(retain_graph = True)
                             optimizerD.step()
 
-                            #add adversarial loss to generative(segmentation network)
-                            other_loss = criterion1(real_val,fake_val)
-                            g_loss = -torch.mean(fake_val)
-                            CE_loss += g_loss  +other_loss
-                             
-                        seg_loss_body = CE_loss 
+                        #add adversarial loss to generative(segmentation network)
+                        other_loss = criterion1(real_val,fake_val)
+                        g_loss = -torch.mean(fake_val)
+                        CE_loss += g_loss  + other_loss
+                        
+                    if phase == 'train':
+                        seg_loss_body = loss 
                         seg_loss_body.backward(retain_graph = True)
                         optimizerG.step()
-                        
-                        predict = torch.argmax(predict,dim=1).cpu().numpy()
-                        
-                        if model == 'CASENet' or data_name == 'edge':
-                            # compare_result = precision[0] > 0.5
-                            # mid_result[compare_result == 1] = 1
-                            # mid_result[compare_result == 0] = 0
-                            
-                            mid_result = precision[0]
-                            compare_back = precision[0][:,0] > 0.5
-                            compare_body = precision[0][:,1] > 0.5
-                            compare_dend = precision[0][:,2] > 0.5
-                            compare_axon = precision[0][:,3] > 0.5
 
-                            mid_result[:,0][compare_back == 1] = 0
-                            mid_result[:,0][compare_back == 0] = 0
-                            
-                            mid_result[:,1][compare_body == 1] = 1
-                            mid_result[:,1][compare_body == 0] = 0
-                            
-                            mid_result[:,2][compare_dend == 1] = 1
-                            mid_result[:,2][compare_dend == 0] = 0
-                            
-                            mid_result[:,3][compare_axon == 1] = 1
-                            mid_result[:,3][compare_axon == 0] = 0
+                    seg_loss += CE_loss.item() * _input.size(0) 
+                    cls_loss += class_loss.item() * _input.size(0)
+                    t_loss = seg_loss + cls_loss 
 
-                            final = mid_result[:,0] + mid_result[:,1] + mid_result[:,2] *2 +mid_result[:,3] *3
-                            evaluator.add_batch(_label.cpu().numpy(),final.cpu().detach().numpy().astype('uint8'))
-                        else : 
-                      
+                    predict = torch.argmax(predict,dim=1).cpu().numpy()
+                    
+                    if model == 'CASENet' or data_name == 'edge':
+                        # compare_result = precision[0] > 0.5
+                        # mid_result[compare_result == 1] = 1
+                        # mid_result[compare_result == 0] = 0
+                        # precision[0] = torch.sigmoid(precision[0])                       
+                        mid_result = precision
+                        compare_back = precision[:,0] > 0.5
+                        compare_body = precision[:,1] > 0.5
+                        compare_dend = precision[:,2] > 0.5
+                        compare_axon = precision[:,3] > 0.5
+
+                        mid_result[:,0][compare_back == 1] = 0
+                        mid_result[:,0][compare_back == 0] = 0
+                        
+                        mid_result[:,1][compare_body == 1] = 1
+                        mid_result[:,1][compare_body == 0] = 0
+                        
+                        mid_result[:,2][compare_dend == 1] = 1
+                        mid_result[:,2][compare_dend == 0] = 0
+                        
+                        mid_result[:,3][compare_axon == 1] = 1
+                        mid_result[:,3][compare_axon == 0] = 0
+
+                        # final = mid_result[:,0] + mid_result[:,1] + mid_result[:,2] *2 +mid_result[:,3] *3
+                        final =  torch.argmax(mid_result,dim=1)
+                        evaluator.add_batch(_label.cpu().numpy(),final.cpu().numpy().astype('uint8'))
+                    else :
+                        if data_name == 'scribble':
+                            evaluator.add_batch(_ful_label.cpu().numpy(),predict)
+                        else: 
                             evaluator.add_batch(_label.cpu().numpy(),predict)
 
-                        # print(precision.shape)
-                        
-                        IOU,Class_IOU,wo_back_MIoU = evaluator.Mean_Intersection_over_Union()
-                        Class_precision, Class_recall,Class_F1score = evaluator.Class_F1_score()
-                        _, _,Class_Fbetascore = evaluator.Class_Fbeta_score(beta=betavalue)                    
-
-            
-            else:
-                pre_IOU = 0
-                pre_ACC = 0
-                loss = 0
-
-                with torch.no_grad():
-                    
-                    
-                    if deepsupervision==True and model == 'nest_unet':
-                        back,body,dend,axon = gen(_input)
-                        gt = _label
-                        # back_label = torch.where(gt==0,torch.ones_like(gt),torch.zeros_like(gt)).view(-1,).float()
-                        # body_label = torch.where(gt==1,torch.ones_like(gt),torch.zeros_like(gt)).view(-1,).float()
-                        # dend_label = torch.where(gt==2,torch.ones_like(gt),torch.zeros_like(gt)).view(-1,).float()
-                        # axon_label = torch.where(gt==3,torch.ones_like(gt),torch.zeros_like(gt)).view(-1,).float()
-
-                        predict = torch.cat((back, body,dend,axon),dim=1).cuda().float()
-                                                
-                        back_loss = criterion(predict,_label)
-                        # body_loss = criterion1(torch.sigmoid(body.view(-1,)),body_label)
-                        # dend_loss = criterion2(torch.sigmoid(dend.view(-1,)),dend_label)
-                        # axon_loss = criterion3(torch.sigmoid(axon.view(-1,)),axon_label)
-
-                        # val_CE_loss = (back_loss+body_loss+dend_loss+axon_loss)/4
-                        val_CE_loss = back_loss
-                        val_loss = val_CE_loss
-
-                        # vevaluator.add_batch(_label.cpu().numpy(),spre)
-                        vevaluator.add_batch(_label.cpu().numpy(),torch.argmax(predict,dim=1).cpu().numpy())
-                        IOU,Class_IOU,wo_back_MIoU = vevaluator.Mean_Intersection_over_Union()
-                        Acc_class,Class_ACC,wo_back_ACC = vevaluator.Pixel_Accuracy_Class()
-                        Class_precision, Class_recall,Class_F1score = vevaluator.Class_F1_score()
-                        _, _,Class_Fbetascore = vevaluator.Class_Fbeta_score(beta=betavalue)
-                        
-                        pre_IOU += Class_IOU
-                        pre_ACC += Class_ACC
-                        
-                        if epoch %changestep ==0:
-                            total_IOU.append(Class_IOU)
-                            total_F1.append(Class_F1score)
-                            total_Fbeta.append(Class_Fbetascore)
-                            total_recall.append(Class_recall)
-                            total_predict.append(Class_precision)
-                        # pre_IOU += Class_IOU
-                        # pre_ACC += Class_ACC
-
-                        middle_IOU = Class_IOU
-                        middle_ACC = Class_ACC
-
-                        pre_IOU = [class_IOU / 9 for class_IOU in pre_IOU]
-                        pre_ACC = [class_IOU / 9 for class_IOU in pre_ACC]
-                        # loss /= len(predict)
-                        # val_loss = loss
-                        # predict = spre
-
-                    else:
-                        predict=gen(_input)
-                        precision = predict
-                        if classnum == 8:
-                            inversevaluator.add_batch(_label.cpu().numpy(),torch.argmax(predict[:,],dim=1).cpu().numpy())
-                            _,inverseClass_IOU,_ = inversevaluator.Mean_Intersection_over_Union()
-                            inverseClass_precision, inverseClass_recall,inverseClass_F1score = inversevaluator.Class_F1_score()
-                            _, _,inverseClass_Fbetascore = inversevaluator.Class_Fbeta_score(beta=betavalue)
-
-                            if epoch %changestep ==0:
-                                inversetotal_IOU.append(inverseClass_IOU)
-                                inversetotal_F1.append(inverseClass_F1score)
-                                inversetotal_Fbeta.append(inverseClass_Fbetascore)
-                                inversetotal_recall.append(inverseClass_recall)
-                                inversetotal_predict.append(inverseClass_precision)
-
-                            val_CE_loss = criterion(predict,_label)
-                        else : 
-                            if model == 'DANET' or model == 'multi_net' or model == 'refinenet':
-                                DAnetpredict = predict
-                                
-                                CE_loss1 = criterion(predict[0],_label)
-                                CE_loss2,label2 = criterion(predict[1],_label,upsample=True)
-                                CE_loss3,label3 = criterion(predict[2],_label,upsample=True)
-                                CE_loss4,label4 = criterion(predict[3],_label,upsample=True)
-                                val_CE_loss = (CE_loss1 + CE_loss2 + CE_loss3 + CE_loss4)
-                                if multiple_scale == True:
-                                    # print(predict[0].shape)
-                                    
-                                    predict[0] = F.interpolate(predict[0], predict[1].size()[2:])
-                                    _label = F.interpolate(_label.unsqueeze(1), predict[1].size()[2:])[:,0]
-                                    predict = predict[0]
-                                    # print(_label.shape,predict.shape)
-                                    # print(predict.shape)
-                                elif multiple_scale == False:
-                                    predict = predict[0]
-                            # vevaluator.add_batch(_label.cpu().numpy(),predict)
-                            else : 
-                                if model == 'HED' or model == 'RCF' or model == 'CASENet':
-                                    val_CE_loss = torch.zeros(1).cuda()
-                                    for o in predict:
-                                        val_CE_loss += criterion(o,_label)
-                                    val_CE_loss = val_CE_loss / len(predict)
-                                    
-                                    predict = predict[0]
-                                else : 
-                                    val_CE_loss = criterion(predict,_label)
-                            predict = torch.argmax(predict,dim=1).cpu().numpy()
-                                # val_CE_loss = criterion(predict[0],_label)
-                                # val_CE_loss += criterion(predict[1],_label)
-                                
-                                # val_dice_loss = criterion_v2(predict,_label)
-                        
-                            val_loss = val_CE_loss  
-                            # EROSION
-                            
-                            
-                            # print(precision[0].shape,'11111')
-                            if model == 'CASENet' or data_name == 'edge':
-                                mid_result = precision[0]
-                                compare_back = precision[0][:,0] > 0.5
-                                compare_body = precision[0][:,1] > 0.5
-                                compare_dend = precision[0][:,2] > 0.5
-                                compare_axon = precision[0][:,3] > 0.5
-
-                                mid_result[:,0][compare_back == 1] = 0
-                                mid_result[:,0][compare_back == 0] = 0
-                                
-                                mid_result[:,1][compare_body == 1] = 1
-                                mid_result[:,1][compare_body == 0] = 0
-                                
-                                mid_result[:,2][compare_dend == 1] = 1
-                                mid_result[:,2][compare_dend == 0] = 0
-                                
-                                mid_result[:,3][compare_axon == 1] = 1
-                                mid_result[:,3][compare_axon == 0] = 0
-
-                                final = mid_result[:,0] + mid_result[:,1] + mid_result[:,2] *2 +mid_result[:,3] *3
-                                # print(final.shape)
-                                vevaluator.add_batch(_label.cpu().numpy(),final.cpu().numpy().astype('uint8'))
-                            # print(predict.shape,'1',precision[0][:,0].shape)
-                            else:
-                                vevaluator.add_batch(_label.cpu().numpy(),predict)
-                            IOU,Class_IOU,wo_back_MIoU = vevaluator.Mean_Intersection_over_Union()
-                            Acc_class,Class_ACC,wo_back_ACC = vevaluator.Pixel_Accuracy_Class()
-                            Class_precision, Class_recall,Class_F1score = vevaluator.Class_F1_score()
-                            _, _,Class_Fbetascore = vevaluator.Class_Fbeta_score(beta=betavalue)
-                            
-                            pre_IOU += Class_IOU
-                            pre_ACC += Class_ACC
-                            if epoch %changestep ==0:
-                                total_IOU.append(Class_IOU)
-                                total_F1.append(Class_F1score)
-                                total_Fbeta.append(Class_Fbetascore)
-                                total_recall.append(Class_recall)
-                                total_predict.append(Class_precision)
-
-
-                            # val_CE_loss = criterion(predict,_label)
-                        
-                        
-                            middle_IOU = Class_IOU
-                            middle_ACC = Class_ACC
-
-                            pre_IOU = [class_IOU / 9 for class_IOU in pre_IOU]
-                            pre_ACC = [class_IOU / 9 for class_IOU in pre_ACC]
-                
+                    IOU,Class_IOU,wo_back_MIoU = evaluator.Mean_Intersection_over_Union()
+                    Acc_class,Class_ACC,wo_back_ACC = evaluator.Pixel_Accuracy_Class()
+                    Class_precision, Class_recall,Class_F1score = evaluator.Class_F1_score()
+                    _, _,Class_Fbetascore = evaluator.Class_Fbeta_score(beta=betavalue)
+                    if phase == 'valid':
+                        avg_IOU += Class_IOU * _input.size(0)
+                        avg_F1 += Class_F1score * _input.size(0)
+        
+        all_loss = [x/len(MyDataset[phase]) for x in [t_loss,seg_loss,cls_loss]]
         if  phase == 'train':
+            
             if use_scheduler == 'Cosine':
                 scheduler.step(epoch)
             if classnum == 8:
@@ -766,7 +705,7 @@ if trainning == True:
                 logger.print_value(invesesum_print,'train')
 
             else:
-                summary_print = {'seg_loss_body':seg_loss_body,
+                summary_print = {'t_loss':all_loss[0],
                                 'Class_IOU':Class_IOU,
                                 'precision':Class_precision, 
                                 'recall':Class_recall,
@@ -776,15 +715,18 @@ if trainning == True:
                     summary_print.update({'gan_g_loss':g_loss,'gan_d_loss':d_loss})
 
                 logger.print_value(summary_print,'train')
-            train_loss = {  'seg_loss_body':seg_loss_body,
-                            'CE_loss':CE_loss}
+            train_loss = {  't_loss':all_loss[0],
+                            'seg_loss':all_loss[1],
+                            'cls_loss': all_loss[2]}
             if discrim == True:
                 train_loss.update({'gan_g_loss':g_loss,'gan_d_loss':d_loss})
             logger.summary_scalars(train_loss,epoch)
             
 
-        elif phase == 'valid': 
+        elif phase == 'valid':
 
+            avg_class_IOU,avg_class_F1 = [x /len(MyDataset[phase]) for x in [avg_IOU,avg_F1]]
+            
             if classnum == 8:
                 inversetest_val = {"inverseClass_IOU":inverseClass_IOU,
                             'inverseprecision':inverseClass_precision, 
@@ -793,13 +735,15 @@ if trainning == True:
                             'inverseFbetascore':inverseClass_Fbetascore}
                 logger.print_value(inversetest_val,'inversetest')
             else :
-                test_val = {"pre_IOU":pre_IOU,"pre_ACC":pre_ACC,"Class_IOU":Class_IOU,"Class_ACC":Class_ACC,
+                test_val = {"avg_class_IOU":avg_class_IOU,"avg_class_F1":avg_class_F1,
+                            "Class_IOU":Class_IOU,"Class_ACC":Class_ACC,
                             "wo_back_MIoU":wo_back_MIoU,"wo_back_ACC":wo_back_ACC,
                             'precision':Class_precision, 
                             'recall':Class_recall,
                             'F1score':Class_F1score,
-                            "val_loss":val_loss,
-                            'Fbetascore':Class_Fbetascore}
+                            "val_loss":all_loss[0],
+                            'seg_loss':all_loss[1],
+                            'cls_loss':all_loss[2]}
                 logger.print_value(test_val,'test')
 
             IOU_scalar = dict()
@@ -808,13 +752,6 @@ if trainning == True:
             F1score_scalar = dict()
             Fbetascore_scalar = dict()
             
-            
-            inverseIOU_scalar = dict()
-            inverseprecision_scalar = dict()
-            inverserecall_scalr = dict()
-            inverseF1score_scalar = dict()
-            inverseFbetascore_scalar = dict()
-
             for i in range(classnum):
                 IOU_scalar.update({'val_IOU_'+str(i):Class_IOU[i]})
                 precision_scalar.update({'val_precision_'+str(i):Class_precision[i]})
@@ -828,8 +765,8 @@ if trainning == True:
                     inverseF1score_scalar.update({'inverseval_F1_'+str(i):Class_F1score[i]})
                     inverseFbetascore_scalar.update({'inverseval_Fbeta'+str(i):Class_Fbetascore[i]})
                 
-            validation_loss = {'val_loss':val_loss,
-                                'val_CE_loss':val_CE_loss}
+            validation_loss = {'val_loss':all_loss[1],
+                                'val_CE_loss':all_loss[2]}
 
             logger.summary_scalars(IOU_scalar,epoch,'IOU')
             logger.summary_scalars(precision_scalar,epoch,'precision')
@@ -869,22 +806,25 @@ if trainning == True:
                 #     pre_dend = decode_segmap(torch.argmax(dend,dim=1).cpu().numpy(),name='dend')
                 #     pre_axon = decode_segmap(torch.argmax(axon,dim=1).cpu().numpy(),name='axon')
                 #     pre_body = pre_body + pre_dend +  pre_axon
-                #     v_la = decode_segmap(torch.argmax(_label,dim=1).cpu().detach().numpy(),name='full')
+                #     v_la = decode_segmap(torch.argmax(_label,dim=1).cpu().detach().numpy(),name='full_4')
                 #     _input = _input.detach().cpu().numpy()
                 # else : 
                 if model == 'HED' or model == 'RCF'  :
                     v_la = (1-_label.unsqueeze(1).cpu().detach().numpy())*255.0
                 elif model == 'CASENet':
-                    v_la = decode_segmap(_label.cpu().detach().numpy(),name='convert')
+                    v_la = decode_segmap(_label.cpu().detach().numpy(),name='full_4')
                 else:
-                    v_la = decode_segmap(_label.cpu().detach().numpy(),name='full')
+                    v_la = decode_segmap(_label.cpu().detach().numpy(),name='full_4')
+                    # ful_v_la = decode_segmap(_ful_label.cpu().detach().numpy(),name='full_4')
+
                 _input = _input.detach().cpu().numpy()
-                normalizedImg = np.zeros((1024, 1024))
-                _input = cv2.normalize(_input,  normalizedImg, 0, 65535 , cv2.NORM_MINMAX)
+                if data_name == 'uint16':
+                    normalizedImg = np.zeros((1024, 1024))
+                    _input = cv2.normalize(_input,  normalizedImg, 0, 65535 , cv2.NORM_MINMAX)
                 if model == 'DANET' or model == 'multi_net' or model == 'refinenet':
-                    v_la2=decode_segmap(label2.cpu().detach().numpy(),name='full')
-                    v_la3=decode_segmap(label3.cpu().detach().numpy(),name='full')
-                    v_la4=decode_segmap(label4.cpu().detach().numpy(),name='full')
+                    v_la2=decode_segmap(label2.cpu().detach().numpy(),name='full_4')
+                    v_la3=decode_segmap(label3.cpu().detach().numpy(),name='full_4')
+                    v_la4=decode_segmap(label4.cpu().detach().numpy(),name='full_4')
                         
                     pre_body1=decode_segmap(torch.argmax(DAnetpredict[0][:,0:4],dim=1).cpu().numpy())
                     pre_body2=decode_segmap(torch.argmax(DAnetpredict[1][:,0:4],dim=1).cpu().numpy())
@@ -897,23 +837,26 @@ if trainning == True:
                     # print(predict.shape)
 
                     pre_body = decode_segmap(predict)
-                    
+                    precision = precision.unsqueeze(2).cpu().numpy() * 65535.
+                    print(precision.shape,'123123123')
+
                     # precision
                     # torchvision.utils.save_images(1-results_all,)
-                    save_stack_images = {'v_la':v_la,'_input':_input.astype('uint16')}
+                    save_stack_images = {'v_la':v_la,'_input':_input.astype('uint16'),'precision':precision.astype('uint16')}
                     if model == 'CASENet':
                         # precision
-                        pre_body = predict_label(precision[0],name='convert')
-                        save_stack_images.update({'pre_body_back':pre_body[0],
-                                            'pre_body_body':pre_body[1],
-                                            'pre_body_dend':pre_body[2],
-                                            'pre_body_axon':pre_body[3],
-                                            'pre_body_full':pre_body[0]+pre_body[1]+pre_body[2]+pre_body[3]})
+                        pre_body = decode_segmap(precision.cpu().numpy(),name='full_4')
+                        save_stack_images.update({'pre_body_back':pre_body})
+                        # save_stack_images.update({'pre_body_back':pre_body[0],
+                        #                     'pre_body_body':pre_body[1],
+                        #                     'pre_body_dend':pre_body[2],
+                        #                     'pre_body_axon':pre_body[3],
+                        #                     'pre_body_full_4':pre_body[0]+pre_body[1]+pre_body[2]+pre_body[3]})
                     
                     # save_stack_images = {'pre_body1':pre_body[1],'v_la':v_la,'_input':_input.astype('uint16')}
                     # precision=score_output(precision)
                     # print(precision.shape)
-                    if model == 'HED' or model =='RCF':
+                    elif model == 'HED' or model =='RCF':
                         result = torch.squeeze(precision[-1].detach()).cpu().numpy()
                         results_all = torch.zeros((len(precision),1,1024,1024))
                         for i in range(len(precision)):
@@ -923,15 +866,17 @@ if trainning == True:
                         'precision2':(1-results_all[1:2])*255.0,
                         'precision3':(1-results_all[2:3])*255.0,
                         'precision4':(1-results_all[3:4])*255.0})
+                    else : 
+                        save_stack_images.update({'pre_body':pre_body})
                     # inversepre_body=decode_segmap(torch.argmax(predict[:,4:8],dim=1).cpu().numpy(),name='inverse')
 
                 
 
-                logger.save_csv_file(np.array(total_IOU),name='valid_total_IOU')
-                logger.save_csv_file(np.array(total_F1),name='valid_total_F1')
-                logger.save_csv_file(np.array(total_Fbeta),name='valid_total_Fbeta')
-                logger.save_csv_file(np.array(total_recall),name='valid_total_recall')
-                logger.save_csv_file(np.array(total_predict),name='valid_total_precision')
+                # logger.save_csv_file(np.array(total_IOU),name='valid_total_IOU')
+                # logger.save_csv_file(np.array(total_F1),name='valid_total_F1')
+                # logger.save_csv_file(np.array(total_Fbeta),name='valid_total_Fbeta')
+                # logger.save_csv_file(np.array(total_recall),name='valid_total_recall')
+                # logger.save_csv_file(np.array(total_predict),name='valid_total_precision')
                 if classnum == 8:
                     logger.save_csv_file(np.array(inversetotal_IOU),name='inversevalid_total_IOU')
                     logger.save_csv_file(np.array(inversetotal_F1),name='inversevalid_total_F1')
@@ -951,6 +896,7 @@ if testing == True:
     checkpoint = torch.load(path +"lastsave_models{}.pth")
     gen.load_state_dict(checkpoint['gen_model'])
     gen.eval()
+
     logger = Logger(path,batch_size=batch_size)
 
     total_IOU = []
@@ -958,16 +904,28 @@ if testing == True:
     total_Fbeta = []
     total_recall = []
     total_predict = []
+    if data_name == 'scribble':
+        MyDataset = {'train' : DataLoader(mydataset_2d_scribble(image_valid,label_valid,ful_label_valid,False,patchwise=patchwise,
+                                        phase='train',multichannel=multichannel,preprocessing=preprocessing_,multiple_scale=multiple_scale),
+                                        1, 
+                                        shuffle = False,
+                                        num_workers = num_workers),
 
-    MyDataset = {'valid' :   DataLoader(mydataset_2d(image_valid,label_valid,False,patchwise=patchwise,phase='test',preprocessing=preprocessing_,multichannel=multichannel),
-                            1, 
-                            shuffle = False,
-                            num_workers = num_workers),
-                'test' :   DataLoader(mydataset_2d(testDir,tlabelDir,False,patchwise=patchwise,phase='test',preprocessing=preprocessing_,multichannel=multichannel, isDir=False),
-                            1, 
-                            shuffle = False,
-                            num_workers = num_workers)}
-    phase = 'test'
+                    'valid' : DataLoader(DataLoader(image_valid,label_valid,ful_label_valid,False,patchwise=patchwise,
+                                        phase='test',multichannel=multichannel,preprocessing=preprocessing_,multiple_scale=multiple_scale),
+                                        1, 
+                                        shuffle = False,
+                                        num_workers = num_workers)}
+    else:
+        MyDataset = {'valid' :   DataLoader(mydataset_2d(image_valid,label_valid,ful_label_valid,False,patchwise=patchwise,phase='test',preprocessing=preprocessing_,multichannel=multichannel),
+                                1, 
+                                shuffle = False,
+                                num_workers = num_workers),
+                    'test' :   DataLoader(mydataset_2d(testDir,tlabelDir,False,patchwise=patchwise,phase='test',preprocessing=preprocessing_,multichannel=multichannel, isDir=False),
+                                1, 
+                                shuffle = False,
+                                num_workers = num_workers)}
+    phase = 'valid'
     logger.changedir(str(phase)+'_result2')
     
     for i, batch in enumerate(MyDataset[phase]):
@@ -989,8 +947,7 @@ if testing == True:
                 else:
                     
                     predict = gen(_input)
-                    
-            
+            precision = predict
             predict = torch.argmax(predict,dim=1).cpu().numpy()
 
             print("???????????????????????????????????????????????")
@@ -1001,11 +958,11 @@ if testing == True:
                 v_la = (1-_label.unsqueeze(1).cpu().detach().numpy())*255.0
                 
             else:
-                v_la = decode_segmap(_label.cpu().detach().numpy().astype('uint16'),nc=4,name='full')
+                v_la = decode_segmap(_label.cpu().detach().numpy().astype('uint16'),nc=4,name='full_4')
             _input = _input.detach().cpu().numpy()
             save_stack_images = {'final_la':v_la, 'FINAL_input':_input}
 
-            # result_crf=np.array(decode_segmap(result_crf,name='full'))
+            # result_crf=np.array(decode_segmap(result_crf,name='full_4'))
             if model == 'DANET' or model == 'multi_net'  or model == 'refinenet':
                 pre_body1=decode_segmap(torch.argmax(DAnetpredict[0][:,0:4],dim=1).cpu().numpy())
                 pre_body2=decode_segmap(torch.argmax(DAnetpredict[1][:,0:4],dim=1).cpu().numpy())
@@ -1026,9 +983,13 @@ if testing == True:
                                         'precision4':((1-results_all[3:4])>0.5)*255.0})
                 
                 vevaluator.add_batch(_label.cpu().numpy(),(1-results_all[0])>0.5)
+            # elif model == 'CASENet':
+            #     result = 
             else:
-                pre_body=decode_segmap(predict,nc=4,name='full')
-                
+                pre_body=decode_segmap(predict,nc=5,name='full_4')
+                print(precision[:,2].max())
+                save_stack_images.update({'final_predict_20':precision[:,2].cpu().numpy()*10})
+
                 save_stack_images.update({'final_predict':pre_body})
 
             #select class
@@ -1040,8 +1001,8 @@ if testing == True:
 
 
             
-                # pre_body=decode_segmap(ch_channel(predict),nc=4,name='full')
-            # pre_body=decode_segmap(ch_channel(predict),nc=4,name='full')
+                # pre_body=decode_segmap(ch_channel(predict),nc=4,name='full_4')
+            # pre_body=decode_segmap(ch_channel(predict),nc=4,name='full_4')
             
             total_IOU.append(Class_IOU)
             total_F1.append(Class_F1score)
@@ -1051,13 +1012,13 @@ if testing == True:
             # if 
             save_path=logger.save_images(save_stack_images,i)
 
-    # logger.make_full_image(imagename='final_predict')
+    # logger.make_full_4_image(imagename='final_predict')
     logger.save_csv_file(np.array(total_IOU),name='total_IOU')
     logger.save_csv_file(np.array(total_F1),name='total_F1')
     logger.save_csv_file(np.array(total_Fbeta),name='total_Fbeta')
     logger.save_csv_file(np.array(total_recall),name='valid_total_recall')
     logger.save_csv_file(np.array(total_predict),name='valid_total_precision')
-    # logger.make_full_image(imagename='post_image')
+    # logger.make_full_4_image(imagename='post_image')
             # # print(result_crf)
             # result_crf = np.transpose(result_crf,[0,2,1])
             # # print(v_input[0].shape)
