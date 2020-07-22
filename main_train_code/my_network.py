@@ -15,6 +15,7 @@ from torch.autograd import Variable
 #=====================================================================#
 #===========================resunet network===========================#
 #=====================================================================#
+
 class ConvBlock(nn.Module):
 
     def __init__(self, in_channels, out_channels, padding=1, kernel_size=3, stride=1, with_nonlinearity=True):
@@ -457,165 +458,6 @@ class OutputTransition(nn.Module):
         return out
 
 
-class VNet(nn.Module):
-    # the number of convolutions in each layer corresponds
-    # to what is in the actual prototxt, not the intent
-    def __init__(self, elu=True, nll=False):
-        super(VNet, self).__init__()
-        self.in_tr = InputTransition(16, elu)
-        self.down_tr32 = DownTransition(16, 1, elu)
-        self.down_tr64 = DownTransition(32, 2, elu)
-        self.down_tr128 = DownTransition(64, 3, elu, dropout=True)
-        # self.down_tr256 = DownTransition(128, 2, elu, dropout=True)
-        # self.up_tr256 = UpTransition(256, 256, 2, elu, dropout=True)
-        self.up_tr128 = UpTransition(128, 128, 2, elu, dropout=True)
-        self.up_tr64 = UpTransition(128, 64, 1, elu)
-        self.up_tr32 = UpTransition(64, 32, 1, elu)
-        self.out_tr = OutputTransition(32, elu, nll)
-
-    def forward(self, x):
-        out16 = self.in_tr(x)
-        out32 = self.down_tr32(out16)
-        out64 = self.down_tr64(out32)
-        out128 = self.down_tr128(out64)
-        # print(out128.shape)
-        # out256 = self.down_tr256(out128)
-        # out = self.up_tr256(out128, out128)
-        out = self.up_tr128(out128, out64)
-        out = self.up_tr64(out, out32)
-        out = self.up_tr32(out, out16)
-        out = self.out_tr(out)
-        return out
-#=====================================================================#
-#==========================3d resnet network==========================#
-#=====================================================================#
-
-class ConvBlock3D(nn.Module):
-
-    def __init__(self, in_channels, out_channels, padding=1, kernel_size=3, stride=1, with_nonlinearity=True):
-        super().__init__()
-        self.conv = nn.Conv3d(in_channels, out_channels, padding=padding, kernel_size=kernel_size, stride=stride)
-        self.bn = nn.BatchNorm3d(out_channels)
-        self.relu = nn.ReLU()
-        self.with_nonlinearity = with_nonlinearity
-
-    def forward(self, x):
-        x = self.conv(x)
-        x = self.bn(x)
-        if self.with_nonlinearity:
-            x = self.relu(x)
-        return x
-
-class Bridge_3D(nn.Module):
-    """
-    This is the middle layer of the UNet which just consists of some
-    """
-
-    def __init__(self, in_channels, out_channels):
-        super().__init__()
-        self.bridge = nn.Sequential(
-            ConvBlock3D(in_channels, out_channels),
-            ConvBlock3D(out_channels, out_channels)
-        )
-
-    def forward(self, x):
-        return self.bridge(x)
-
-class UpBlockForUNetWith3DResNet101(nn.Module):
-
-    def __init__(self, in_channels, out_channels, up_conv_in_channels=None, up_conv_out_channels=None,
-                 upsampling_method="deconv"):
-        super().__init__()
-
-        if up_conv_in_channels == None:
-            up_conv_in_channels = in_channels
-        if up_conv_out_channels == None:
-            up_conv_out_channels = out_channels
-        if upsampling_method =='skernel':
-            self.upsample = nn.ConvTranspose3d(up_conv_in_channels, up_conv_out_channels, kernel_size=(1,2,2), stride=(1,2,2))
-        elif upsampling_method == 'deconv': 
-            self.upsample = nn.ConvTranspose3d(up_conv_in_channels, up_conv_out_channels, kernel_size=(2,2,2), stride=(2,2,2))
-        else:
-            self.upsample = nn.ConvTranspose3d(up_conv_in_channels, out_channels, kernel_size=(1,1,1), stride=(1,1,1)) 
-        self.conv_block_1 = ConvBlock3D(in_channels, out_channels)    
-        self.conv_block_2 = ConvBlock3D(out_channels, out_channels)
-
-    def forward(self, up_x, down_x):
-        """
-        :param up_x: this is the output from the previous up block
-        :param down_x: this is the output from the down block
-        :return: upsampled feature map
-        """
-        # print(up_x.shape,down_x.shape)
-        x = self.upsample(up_x)
-        # print(x.shape,down_x.shape)
-        x = torch.cat([x, down_x], 1)
-
-        x = self.conv_block_1(x)
-        x = self.conv_block_2(x)
-        return x
-
-class unet3d_resnet(nn.Module):
-    DEPTH = 5
-
-    def __init__(self, n_classes=4):
-        super().__init__()
-        # self.first = nn.Conv2d(1,3,3,1,padding=1)
-        resnet = resnet101(num_classes=1,
-                shortcut_type='B',
-                sample_size=256,
-                sample_duration=8)
-        down_blocks = []
-        up_blocks = []
-        self.input_block = nn.Sequential(*list(resnet.children()))[:3]
-        self.input_pool = list(resnet.children())[3]
-        for bottleneck in list(resnet.children())[:7]:
-            if isinstance(bottleneck, nn.Sequential):
-                down_blocks.append(bottleneck)
-        self.down_blocks = nn.ModuleList(down_blocks)
-        # self.bridge = Bridge_3D(2048, 2048)
-        # up_blocks.append(UpBlockForUNetWith3DResNet101(2048, 1024,upsampling_method='skernel'))
-        up_blocks.append(UpBlockForUNetWith3DResNet101(1024, 512,upsampling_method='skernel'))
-        up_blocks.append(UpBlockForUNetWith3DResNet101(512, 256,upsampling_method='deconv'))
-        up_blocks.append(UpBlockForUNetWith3DResNet101(in_channels=128 + 64, out_channels=128,
-                                                    up_conv_in_channels=256, up_conv_out_channels=128,upsampling_method='deconv'))
-        up_blocks.append(UpBlockForUNetWith3DResNet101(in_channels=64 + 3, out_channels=64,
-                                                    up_conv_in_channels=128, up_conv_out_channels=64,upsampling_method='last'))
-
-        self.up_blocks = nn.ModuleList(up_blocks)
-
-        self.out = nn.Conv3d(64, n_classes, kernel_size=1, stride=1)
-
-    def forward(self, x, with_output_feature_map=False):
-        # x = self.first(x)
-        pre_pools = dict()
-        pre_pools[f"layer_0"] = x
-        x = self.input_block(x)
-        pre_pools[f"layer_1"] = x
-        x = self.input_pool(x)
-
-        # print(x.shape)
-        for i, block in enumerate(self.down_blocks, 2):
-            x = block(x)
-            # print(x.shape)
-            if i == (unet3d_resnet.DEPTH - 1):
-                continue
-            pre_pools[f"layer_{i}"] = x
-
-
-        # x = self.bridge(x)/
-        # print(x.shape)
-        for i, block in enumerate(self.up_blocks, 1):
-            key = f"layer_{unet3d_resnet.DEPTH - 1 - i}"
-            x = block(x, pre_pools[key])
-            # print(x.shape)
-        output_feature_map = x
-        x = self.out(x)
-        
-        if with_output_feature_map:
-            return x, output_feature_map
-        else:
-            return x
 #=====================================================================#
 #===========================detecion network==========================#
 #=====================================================================#
@@ -884,9 +726,56 @@ class NestedUNet(nn.Module):
             return output
 
 
+class clas_pretrain_unet(nn.Module):
+    def __init__(self,in_channels=1,out_channels=5):
+        super(clas_pretrain_unet,self).__init__()
+        feature = [64,128,256,512]
+        self.model = smp.Unet('resnet34',in_channels=in_channels,classes=out_channels,encoder_weights=None)
+        self.decoders = list(self.model.decoder.children())[1]
+        self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
+        # self.classconv = nn.Conv2d(512,out_channels,7,7)
+        # print(list(self.model.encoder.children())[-2][2])
+        # print(self.model.encoder)
+        
+        self.classLiner = nn.Linear(feature[-1]*4*4,out_channels)
+
+        self.last = nn.Conv2d(32,out_channels,1)
+        # self.classliner = nn.Linear
+    def encoder_forward(self, x):
+        return self.model.encoder.forward(x)
+    
+    def forward(self,x,phase='train'):
+        encoders = self.encoder_forward(x)
+        
+        class_layer = encoders[-1]
+        # print(encoders[-1].shape,'22',class_layer.view(class_layer.size(0),-1).shape)
+        
+        # class_feature = F.linear(class_layer.view(class_layer.size(0),-1),(512*(2**len(encoders))*(2**len(encoders)))))
+        result = torch.cat([encoders[-2],self.upsample(encoders[5])],1)
+        
+        d0 = self.decoders[0](result) 
+        
+        d0 = torch.cat([encoders[-3],d0],1)
+        d1 = self.decoders[1](d0) 
+        
+        d1 = torch.cat([encoders[-4],d1],1)
+        d2 = self.decoders[2](d1)
+
+        d2 = torch.cat([encoders[-5],d2],1)
+        
+        d3 = self.decoders[3](d2)
+        
+        result = self.last(d3)
+        # result = self.softmax(self.finals(d3))
+        if phase == 'train':
+            class_feature = self.classLiner(class_layer.view(class_layer.size(0),-1))
+            return result,F.softmax(class_feature)
+        else:
+            return result,None
 ###load model 
-def pretrain_unet(classnum):
+def pretrain_unet(in_channels,classnum):
     return smp.Unet('resnet34',in_channels=1,classes=classnum,activation='softmax')
+    
 def pretrain_efficent_unet():
     return smp.Unet('efficientnet-b3',in_channels=1,classes=4,activation='softmax')
 
