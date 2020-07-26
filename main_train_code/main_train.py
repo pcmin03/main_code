@@ -35,13 +35,13 @@ parser.add_argument('--knum', help='Select Dataset')
 parser.add_argument('--gpu', default=0,help='comma separated list of GPU(s) to use.',type=int)
 parser.add_argument('--weight_decay',default=0.001,help='set weight_decay',type=float)
 parser.add_argument('--weight',help='set Adaptive weight',type=float)
-parser.add_argument('--start_lr',default=7e-2, help='set of learning rate', type=float)
-parser.add_argument('--end_lr',default=7e-3,help='set fo end learning rate',type=float)
+parser.add_argument('--start_lr',default=3e-2, help='set of learning rate', type=float)
+parser.add_argument('--end_lr',default=3e-3,help='set fo end learning rate',type=float)
 parser.add_argument('--paralle',default=False,help='GPU paralle',type=bool)
 parser.add_argument('--scheduler',default='Cosine',help='select schduler method',type=str)
 parser.add_argument('--epochs',default=201,help='epochs',type=int)
 parser.add_argument('--out_class',default=4,help='set of output class',type=int)
-parser.add_argument('--changestep',default=20,help='change train to valid',type=int)
+parser.add_argument('--changestep',default=10,help='change train to valid',type=int)
 parser.add_argument('--pretrain',default=False,help='load pretrained',type=bool)
 
 
@@ -71,9 +71,10 @@ print(knum,'=============')
 foldnum = 10
 betavalue = 2
 phase = 'train'
-model = 'class_unet'
+model = 'newunet'
 data_name = 'uint16'
-save_name = 'seg_'
+save_name = 'seg_and_adptive_rmse_regulaizeloss_axon_version6_'
+# ../newunetmodel/newunetmodel3seg_and_adptive_rmse_regulaizeloss_background_version6_100_uint16_/
 name = save_name+str(int(args.weight))+'_'+str(data_name)+'_'
 
 # name = 'Adaptive_Full_4_image_scribble1000_scribble_'
@@ -204,6 +205,10 @@ if model =='unet':
     batch_size = 120
     gen = pretrain_unet(3,5).to(device)
 
+if model =='newunet':
+    batch_size = 250
+    gen = pretrain_unet(1,4).to(device)
+
 elif model=='res_unet':
     batch_size = 22
     gen = Segmentataion_resnet101unet().to(device)
@@ -280,10 +285,10 @@ if paralle == True:
     gen = torch.nn.DataParallel(gen, device_ids=[0,1,2,3])
 
 if deleteall==True:
-    logger = Logger(path,batch_size=batch_size,delete=deleteall,num=str(knum),name=model+name)
+    logger = Logger(path,batch_size=batch_size,delete=deleteall,num=str(knum),name=model)
 
 else:
-    logger = Logger(path,batch_size=batch_size,delete=False,num=str(knum),name=model+name)
+    logger = Logger(path,batch_size=batch_size,delete=False,num=str(knum),name=model)
     #training
 
 optimizerG = optim.Adam(gen.parameters(),lr=learning_rate)
@@ -398,12 +403,17 @@ def compute_gradient_penalty(D, real_samples, fake_samples):
 
 #set loss
 # criterion = Custom_CE(int(args.weight),Gaussian=True).to(device)
-# criterion = Custom_Adaptive_Gaussian_DistanceMap(int(args.weight),True).to(device)
+# criterion = Custom_Adaptive_Gaussian_DistanceMap(int(args.weight),False).to(device)
 # criterion = Custom_dend_Adaptive_Gaussian_DistanceMap(int(args.weight),True).to(device)
 
 # criterion = Custom_WeightedCrossEntropyLossV2().to(device)
-criterion = nn.CrossEntropyLoss()
-classificaiton_loss = nn.BCEWithLogitsLoss()
+# criterion = nn.CrossEntropyLoss()
+# criterion = Custom_CE(int(args.weight))
+criterion = Custom_Adaptive_DistanceMap(int(args.weight))
+# classificaiton_loss = Custom_RMSE_regularize(int(args.weight))
+reconstruction_loss = Custom_RMSE_regularize(int(args.weight))
+tv_loss = TVLoss(TVLoss_weight=1e-2)
+# classificaiton_loss = nn.BCEWithLogitsLoss()
 # from configure import Config
 
 # from DataLoader import DataLoader
@@ -415,7 +425,32 @@ classificaiton_loss = nn.BCEWithLogitsLoss()
 # criterion = MultiLLFunction().to(device)
 
 # criterion = cross_entropy_loss().to(device)
+# def tv_loss(img, tv_weight):
+#     """
+#     Compute total variation loss.
+#     Inputs:
+#     - img: PyTorch Variable of shape (1, 3, H, W) holding an input image.
+#     - tv_weight: Scalar giving the weight w_t to use for the TV loss.
+#     Returns:
+#     - loss: PyTorch Variable holding a scalar giving the total variation loss
+#       for img weighted by tv_weight.
+#     """
+#     w_variance = torch.sum(torch.pow(img[:,:,:,:-1] - img[:,:,:,1:], 2))
+#     h_variance = torch.sum(torch.pow(img[:,:,:-1,:] - img[:,:,1:,:], 2))
+#     loss = tv_weight * (h_variance + w_variance)
+#     return loss
 
+def custom_regulrize(mask_input,feature_output):
+    # if stage == 'forward':
+    
+    feature_output
+    sum_output = torch.sum(feature_output[:,1:4],dim=1)
+
+    MSE = torch.abs(mask_input - sum_output)
+    # print(mask_input.max(),sum_output.max())
+    RMSE = torch.mul(MSE,MSE).float()
+    # print(MSE.max(),RMSE.max())
+    return torch.mean(RMSE).float() 
 
 # MultiLLFunction
 print(1/(1+int(args.weight)),'1111')
@@ -485,6 +520,7 @@ if trainning == True:
         inversevaluator.reset()
         seg_loss = 0
         cls_loss = 0
+        tvl_loss = 0
         t_loss = 0
         avg_IOU =0 
         avg_F1 = 0
@@ -514,7 +550,7 @@ if trainning == True:
         for i, batch in enumerate(tqdm.tqdm(MyDataset[phase])):
             
             _input, _label = Variable(batch[0]).to(device), Variable(batch[1]).to(device)
-            class_label = Variable(batch[2]).to(device)
+            mask_ = Variable(batch[2]).to(device)
             
             
             optimizerG.zero_grad()
@@ -545,7 +581,7 @@ if trainning == True:
             else :
                 ##### train with source code #####
                 with torch.set_grad_enabled(phase == 'train'):
-                    predict,pred_class=gen(_input,phase)
+                    predict=gen(_input)
                     precision =predict
                 
                 if classnum == 8:
@@ -591,15 +627,23 @@ if trainning == True:
                             CE_loss = ncuts_loss
 
                         else :
-                            CE_loss = criterion(predict,_label.long())
-                                
+                            CE_loss = criterion(predict,_label)
+                            
                             if phase == 'train':
-                                class_loss = CE_loss                            
-                                # classificaiton_loss(pred_class,class_label)
-                                loss = CE_loss + class_loss
+                                # mask_input = _input
+                                class_loss = reconstruction_loss(_input,predict) 
+                                # tvl = tv_loss(predict)
+                                # class_loss = CE_loss
+                                tvl = CE_loss
+                                                  
+                                loss = class_loss +CE_loss
                             else : 
-                                class_loss = CE_loss
-                                loss = CE_loss + class_loss
+                                class_loss = reconstruction_loss(_input,predict,True) 
+                                # tvl = tv_loss(predict)
+                                # class_loss = CE_loss
+                                tvl = CE_loss
+
+                                loss = class_loss +CE_loss
                             # target_vars = list()
                             # new_class =torch.zeros_like(pred_class)
                             # for i in range(len(_label)):
@@ -607,8 +651,18 @@ if trainning == True:
 
                             # print(class_label.shape,pred_class.shape,'11')
                             #  
+                            if phase == 'train':
+                                seg_loss_body = loss 
+                                seg_loss_body.backward()
+                                optimizerG.step()
+
+                            seg_loss += CE_loss.item() * _input.size(0) 
+                            cls_loss += class_loss.item() * _input.size(0)
+                            tvl_loss += tvl.item() * _input.size(0)
                             
-                            
+                            t_loss = seg_loss + cls_loss + tvl
+                            predict = torch.argmax(predict,dim=1).cpu().numpy()
+
                             if data_name =='scribble':
                                 softmax = nn.Softmax(dim=1)
                                 probs = softmax(predict)
@@ -639,17 +693,6 @@ if trainning == True:
                         g_loss = -torch.mean(fake_val)
                         CE_loss += g_loss  + other_loss
                         
-                    if phase == 'train':
-                        seg_loss_body = loss 
-                        seg_loss_body.backward(retain_graph = True)
-                        optimizerG.step()
-
-                    seg_loss += CE_loss.item() * _input.size(0) 
-                    cls_loss += class_loss.item() * _input.size(0)
-                    t_loss = seg_loss + cls_loss 
-
-                    predict = torch.argmax(predict,dim=1).cpu().numpy()
-                    
                     if model == 'CASENet' or data_name == 'edge':
                         # compare_result = precision[0] > 0.5
                         # mid_result[compare_result == 1] = 1
@@ -690,7 +733,7 @@ if trainning == True:
                         avg_IOU += Class_IOU * _input.size(0)
                         avg_F1 += Class_F1score * _input.size(0)
         
-        all_loss = [x/len(MyDataset[phase]) for x in [t_loss,seg_loss,cls_loss]]
+        all_loss = [x/len(MyDataset[phase]) for x in [t_loss,seg_loss,cls_loss,tvl_loss]]
         if  phase == 'train':
             
             if use_scheduler == 'Cosine':
@@ -706,11 +749,15 @@ if trainning == True:
 
             else:
                 summary_print = {'t_loss':all_loss[0],
+                                'seg_loss':all_loss[1],
+                                'cls_loss': all_loss[2],
                                 'Class_IOU':Class_IOU,
                                 'precision':Class_precision, 
                                 'recall':Class_recall,
                                 'F1score':Class_F1score,
                                 'Fbetascore':Class_Fbetascore}
+                            
+                summary_print.update({'tvl_loss':all_loss[3]})
                 if discrim == True:
                     summary_print.update({'gan_g_loss':g_loss,'gan_d_loss':d_loss})
 
@@ -718,6 +765,7 @@ if trainning == True:
             train_loss = {  't_loss':all_loss[0],
                             'seg_loss':all_loss[1],
                             'cls_loss': all_loss[2]}
+            train_loss.update({'tvl_loss':all_loss[3]})
             if discrim == True:
                 train_loss.update({'gan_g_loss':g_loss,'gan_d_loss':d_loss})
             logger.summary_scalars(train_loss,epoch)
@@ -743,7 +791,9 @@ if trainning == True:
                             'F1score':Class_F1score,
                             "val_loss":all_loss[0],
                             'seg_loss':all_loss[1],
-                            'cls_loss':all_loss[2]}
+                            'cls_loss':all_loss[2],}
+                # print(all_loss[3])
+                test_val.update({'tvl_loss':all_loss[3]})
                 logger.print_value(test_val,'test')
 
             IOU_scalar = dict()
@@ -767,7 +817,7 @@ if trainning == True:
                 
             validation_loss = {'val_loss':all_loss[1],
                                 'val_CE_loss':all_loss[2]}
-
+            validation_loss.update({'tv_loss':all_loss[3]})
             logger.summary_scalars(IOU_scalar,epoch,'IOU')
             logger.summary_scalars(precision_scalar,epoch,'precision')
             logger.summary_scalars(recall_scalr,epoch,'recall')
@@ -809,6 +859,7 @@ if trainning == True:
                 #     v_la = decode_segmap(torch.argmax(_label,dim=1).cpu().detach().numpy(),name='full_4')
                 #     _input = _input.detach().cpu().numpy()
                 # else : 
+                
                 if model == 'HED' or model == 'RCF'  :
                     v_la = (1-_label.unsqueeze(1).cpu().detach().numpy())*255.0
                 elif model == 'CASENet':
@@ -817,6 +868,25 @@ if trainning == True:
                     v_la = decode_segmap(_label.cpu().detach().numpy(),name='full_4')
                     # ful_v_la = decode_segmap(_ful_label.cpu().detach().numpy(),name='full_4')
 
+                one_img = torch.zeros_like(_input)
+                zero_img = torch.ones_like(_input)
+                mask_ = torch.where(_input>0.3,zero_img,one_img)
+                
+                mask_ = mask_.detach().cpu().numpy()
+                
+                # normalizedImg = np.zeros((1024, 1024))
+                # _mask = cv2.normalize(_mask,  normalizedImg, 0, 65535 , cv2.NORM_MINMAX)
+                
+                # forground = _mask >0.2
+                # bacground = _mask <0.2
+                # _mask[forground] = 1
+                # _mask[bacground] = 0
+                # _mask = _mask * 255.
+                # print(_mask.shape)
+
+                # _mask = _mask.detach().cpu().numpy()
+                # normalizedImg = np.zeros((1024, 1024))
+                # _mask = cv2.normalize(_mask,  normalizedImg, 0, 255 , cv2.NORM_MINMAX)
                 _input = _input.detach().cpu().numpy()
                 if data_name == 'uint16':
                     normalizedImg = np.zeros((1024, 1024))
@@ -837,12 +907,14 @@ if trainning == True:
                     # print(predict.shape)
 
                     pre_body = decode_segmap(predict)
-                    precision = precision.unsqueeze(2).cpu().numpy() * 65535.
+                    precision = precision.unsqueeze(2).cpu().numpy()
+                    normalizedImg = np.zeros((1024, 1024))
+                    precision = cv2.normalize(precision,  normalizedImg, 0, 65535 , cv2.NORM_MINMAX)
                     print(precision.shape,'123123123')
 
                     # precision
                     # torchvision.utils.save_images(1-results_all,)
-                    save_stack_images = {'v_la':v_la,'_input':_input.astype('uint16'),'precision':precision.astype('uint16')}
+                    save_stack_images = {'mask_':mask_,'v_la':v_la,'_input':_input.astype('uint16'),'precision':precision.astype('uint16')}
                     if model == 'CASENet':
                         # precision
                         pre_body = decode_segmap(precision.cpu().numpy(),name='full_4')
@@ -917,19 +989,20 @@ if testing == True:
                                         shuffle = False,
                                         num_workers = num_workers)}
     else:
-        MyDataset = {'valid' :   DataLoader(mydataset_2d(image_valid,label_valid,ful_label_valid,False,patchwise=patchwise,phase='test',preprocessing=preprocessing_,multichannel=multichannel),
-                                1, 
-                                shuffle = False,
-                                num_workers = num_workers),
+        MyDataset = {'valid' : DataLoader(mydataset_2d(image_valid,label_valid,False,patchwise=False,phase='test',multichannel=multichannel,preprocessing=False,multiple_scale=multiple_scale),
+                                    1, 
+                                    shuffle = False,
+                                    num_workers = num_workers),
                     'test' :   DataLoader(mydataset_2d(testDir,tlabelDir,False,patchwise=patchwise,phase='test',preprocessing=preprocessing_,multichannel=multichannel, isDir=False),
                                 1, 
                                 shuffle = False,
                                 num_workers = num_workers)}
-    phase = 'valid'
+    phase = 'test'
     logger.changedir(str(phase)+'_result2')
     
     for i, batch in enumerate(MyDataset[phase]):
         _input, _label = batch[0].to(device), batch[1].to(device)
+        class_label = Variable(batch[2]).to(device)
         with torch.no_grad():
 
             if deepsupervision==True and model == 'nest_unet':
@@ -945,8 +1018,8 @@ if testing == True:
                     precision = predict
                     predict = predict[0]
                 else:
-                    
                     predict = gen(_input)
+
             precision = predict
             predict = torch.argmax(predict,dim=1).cpu().numpy()
 
@@ -956,9 +1029,9 @@ if testing == True:
             # vevaluator.add_batch(_label.cpu().numpy(),predict)
             if model =='RCF':
                 v_la = (1-_label.unsqueeze(1).cpu().detach().numpy())*255.0
-                
             else:
                 v_la = decode_segmap(_label.cpu().detach().numpy().astype('uint16'),nc=4,name='full_4')
+            
             _input = _input.detach().cpu().numpy()
             save_stack_images = {'final_la':v_la, 'FINAL_input':_input}
 
@@ -982,26 +1055,25 @@ if testing == True:
                                         'precision3':((1-results_all[2:3])>0.5)*255.0,
                                         'precision4':((1-results_all[3:4])>0.5)*255.0})
                 
-                vevaluator.add_batch(_label.cpu().numpy(),(1-results_all[0])>0.5)
+                evaluator.add_batch(_label.cpu().numpy(),(1-results_all[0])>0.5)
             # elif model == 'CASENet':
             #     result = 
             else:
-                pre_body=decode_segmap(predict,nc=5,name='full_4')
-                print(precision[:,2].max())
-                save_stack_images.update({'final_predict_20':precision[:,2].cpu().numpy()*10})
-
+                print(predict.shape,'22')
+                pre_body=decode_segmap(predict,nc=4,name='full_4')
+                print(pre_body.shape,'33')
+                # print(precision[:,2].max())
+                # save_stack_images.update({'final_predict_20':precision[:,2].cpu().numpy()*10})
                 save_stack_images.update({'final_predict':pre_body})
 
             #select class
-            vevaluator.add_batch(_label.cpu().numpy(),predict)
-            IOU,Class_IOU,wo_back_MIoU = vevaluator.Mean_Intersection_over_Union()
-            Acc_class,Class_ACC,wo_back_ACC = vevaluator.Pixel_Accuracy_Class()
-            Class_precision, Class_recall,Class_F1score = vevaluator.Class_F1_score()
-            _, _,Class_Fbetascore = vevaluator.Class_Fbeta_score(beta=betavalue)
+            evaluator.add_batch(_label.cpu().numpy(),predict)
+            IOU,Class_IOU,wo_back_MIoU = evaluator.Mean_Intersection_over_Union()
+            Acc_class,Class_ACC,wo_back_ACC = evaluator.Pixel_Accuracy_Class()
+            Class_precision, Class_recall,Class_F1score = evaluator.Class_F1_score()
+            _, _,Class_Fbetascore = evaluator.Class_Fbeta_score(beta=betavalue)
 
-
-            
-                # pre_body=decode_segmap(ch_channel(predict),nc=4,name='full_4')
+            # pre_body=decode_segmap(ch_channel(predict),nc=4,name='full_4')
             # pre_body=decode_segmap(ch_channel(predict),nc=4,name='full_4')
             
             total_IOU.append(Class_IOU)

@@ -17,6 +17,14 @@ class Logger(object):
             print('----- Make_save_Dir-------------')
             os.makedirs(self.log_dir)
             print(self.log_dir)
+        if not os.path.exists('./merge_path/board'+name+'/'):
+            print('----- Make_save_Dir-------------')
+            os.makedirs('./merge_path/board'+name+'/')
+            print('./merge_path/board'+name+'/')
+        # if not os.path.exists(merge_path):
+        #     print('----- Make_save_Dir-------------')
+        #     os.makedirs(merge_path)
+        #     print(merge_path)
         if delete == True:
 
             print('----- remove_Dir-------------')
@@ -69,8 +77,9 @@ class Logger(object):
             
             #change NCHW to NHWC save stack_image of TIF file
             #3d image
+            print(images_dict[img][num].shape,img)
             if images_dict[img][num].ndim == 4:
-                result_image = np.transpose(images_dict[img][num],[1,2,3,0])
+                result_image = np.transpose(images_dict[img][num],[0,2,3,1])
             #2d image
             elif images_dict[img][num].ndim ==3:
                 result_image = np.transpose(images_dict[img][num],[1,2,0])
@@ -182,6 +191,8 @@ class Logger(object):
         import pandas
         # for num,name in enumerate(Class):
         df = pd.DataFrame(Class,columns =['back','body','dend','axon'])
+        
+        # df = pd.DataFrame(Class,columns =['back','forward'])
         df.to_csv(self.log_dir +str(name)+'.csv')
         
         

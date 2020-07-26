@@ -19,6 +19,7 @@ from neuron_util import *
 from skimage.transform import resize
 from ND_Crossentory import CrossentropyND, TopKLoss, WeightedCrossEntropyLoss
 
+
 class MultiLLFunction(nn.Module):
     def __init__(self, beta=0.5):
         super(MultiLLFunction, self).__init__()
@@ -204,15 +205,16 @@ class RMSELoss(nn.Module):
         self.eps = eps
         
     def forward(self,yhat,gt):
-        back_gt = torch.where(gt==0,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
-        body_gt = torch.where(gt==1,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
-        dend_gt = torch.where(gt==2,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1) 
-        axon_gt = torch.where(gt==3,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
-        y = torch.cat((back_gt, body_gt,dend_gt,axon_gt),dim=1).cuda().float()
+        # back_gt = torch.where(gt==0,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
+        # body_gt = torch.where(gt==1,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
+        # dend_gt = torch.where(gt==2,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1) 
+        # axon_gt = torch.where(gt==3,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
+        gt = torch.sum(gt[:,1:4],dim=1)
+        # y = torch.cat((back_gt, body_gt,dend_gt,axon_gt),dim=1).cuda().float()
 
-        loss = torch.sqrt(self.mse(yhat,y)+self.eps)
+        loss = torch.mean(torch.sqrt(self.mse(gt,yhat)))
         # print(loss)
-        return loss
+        return loss * 1e-2
 
 
 class Custom_TM_CE(torch.nn.Module):
@@ -226,7 +228,7 @@ class Custom_TM_CE(torch.nn.Module):
         print(net_output.shape,'111')
 
         # splite prediction channel 
-        batch,classnum,xsize = new_output.shape
+        batch,classnum,xsize = new_output.shapeF
         split_output=net_output.view(batch,2,classnum//2,xsize,xsize)
         split_ouptut = torch.split(split_output,2,dim=1)
 
@@ -298,7 +300,103 @@ class Custom_Adaptive_DistanceMap(torch.nn.Module):
         RMSE = torch.mul(MSE,MSE).float()
         
         return torch.mean((back_one*RMSE + back_zero*RMSE).float())
- 
+class TVLoss(nn.Module):
+    def __init__(self,TVLoss_weight=1):
+        super(TVLoss,self).__init__()
+        self.TVLoss_weight = TVLoss_weight
+
+    def forward(self,x):
+        batch_size = x.size()[0]
+        h_x = x.size()[2]
+        w_x = x.size()[3]
+        count_h = self._tensor_size(x[:,:,1:,:])
+        count_w = self._tensor_size(x[:,:,:,1:])
+        h_tv = torch.pow((x[:,:,1:,:]-x[:,:,:h_x-1,:]),2).sum()
+        w_tv = torch.pow((x[:,:,:,1:]-x[:,:,:,:w_x-1]),2).sum()
+        return self.TVLoss_weight*2*(h_tv/count_h+w_tv/count_w)/batch_size
+
+    def _tensor_size(self,t):
+        return t.size()[1]*t.size()[2]*t.size()[3]
+
+class Custom_RMSE_regularize(torch.nn.Module):
+    def __init__(self,weight,distanace_map=False):
+        super(Custom_RMSE_regularize,self).__init__()
+        self.weight = weight
+        self.dis_map = distanace_map
+
+    def forward(self,mask_input,feature_output,print_pixel_number=False):
+        # if stage == 'forward':
+        # back_gt = feature_output[:,0:1]
+        # feature_output
+        # sum_output = torch.sum(feature_output[:,1:4],dim=1).unsqueeze(1)
+        sum_output = feature_output[:,4].unsqueeze(1)
+        back_output = feature_output[:,0].unsqueeze(1)
+
+        one_img = torch.zeros_like(mask_input)
+        zero_img = torch.ones_like(mask_input)
+        mask_img = torch.where(mask_input>0.3,zero_img,one_img)
+        back_mask_img = torch.where(mask_input>0.3,one_img,zero_img)
+
+        # L1 loss
+        MSE = sum_output - mask_img  
+        B_MSE =  back_output - back_mask_img  
+        if print_pixel_number == True:    
+            print(sum_output.max())
+            print(torch.sum(sum_output>0.5),torch.sum(mask_img),torch.sum(back_mask_img))
+        
+        RMSE = torch.mul(MSE,MSE).float()
+        BRMSE = torch.mul(B_MSE,B_MSE).float()
+        # print(MSE.max(),RMSE.max())
+        return torch.mean(RMSE).float() 
+
+class Custom_CE_regularize(torch.nn.Module):
+    def __init__(self,weight,distanace_map=False):
+        super(Custom_CE_regularize,self).__init__()
+        self.weight = weight
+        self.dis_map = distanace_map
+
+    def forward(self,mask_input,feature_output,print_pixel_number=False):
+        # if stage == 'forward':
+        # back_gt = feature_output[:,0:1]
+        # feature_output
+        sum_output = torch.sum(feature_output[:,1:4],dim=1)
+        back_output = feature_output[:,0]
+
+        one_img = torch.zeros_like(mask_input)
+        zero_img = torch.ones_like(mask_input)
+        mask_img = torch.where(mask_input>0.3,zero_img,one_img)
+        back_mask_img = torch.where(mask_input>0.3,one_img,zero_img)
+        
+        # print(torch.sum(sum_output,dim=1))
+        # def weight_init(self,x,label):
+        # if label.data[0]:
+        #     x[:,:64,:,:] =0
+        #     return x
+        # else:
+        #     x[:,64:,:,:] =0
+        #     return x
+
+        # L1 loss
+        # print(mask_input.max(),mask_input.mean())
+        # mask_input = mask_input.clone()
+        # torch.where
+        # forground = mask_input >0.2
+        # bacground = mask_input <0.2
+        # mask_input[forground] = 1
+        # mask_input[bacground] = 0
+        # print(mask_input.min())
+        # print(torch.sum(mask_input[forground],dim=0),torch.sum(mask_input[bacground],dim=0))
+        MSE = sum_output - mask_img  
+        B_MSE =  back_output - back_mask_img  
+        if print_pixel_number == True:    
+            print(sum_output.max())
+            print(torch.sum(sum_output>0.5),torch.sum(mask_img),torch.sum(back_mask_img))
+        
+        RMSE = torch.mul(MSE,MSE).float()
+        BRMSE = torch.mul(B_MSE,B_MSE).float()
+        # print(MSE.max(),RMSE.max())
+        return torch.mean(RMSE).float() 
+
 class Custom_Adaptive_class_DistanceMap(torch.nn.Module):
     
     def __init__(self,weight,distanace_map=False):
@@ -327,24 +425,24 @@ class Custom_Adaptive_class_DistanceMap(torch.nn.Module):
         back_output = back_output.float()
         
         
-        ad_weight = 100
-        decrease_weight = 1/(1+ 100)
+        # ad_weight = 100
+        # decrease_weight = 1/(1+ 100)
 
         back_one = back_gt/(1+ int(self.weight)*(torch.abs(back_output - back_gt))).float()
         back_zero = (1-back_gt).float()
 
-        bodyMSE = net_output[:,1:2] - new_gt[:,1:2]
-        dendMSE = net_output[:,2:3] - new_gt[:,2:3]
-        axonMSE = net_output[:,3:4] - new_gt[:,3:4]
-
-        MSE = net_output - new_gt
+        # bodyMSE = net_output[:,1:2] - new_gt[:,1:2]
+        # dendMSE = net_output[:,2:3] - new_gt[:,2:3]
+        # axonMSE = net_output[:,3:4] - new_gt[:,3:4]
+        # print(new_gt.shape,net_output.shape)
+        MSE = torch.abs(net_output - new_gt)
         RMSE = torch.mul(MSE,MSE).float()
         
-        bodyRMSE = decrease_weight * torch.mul(bodyMSE,bodyMSE).float()
-        dendRMSE = decrease_weight * torch.mul(dendMSE,dendMSE).float()
-        axonRMSE = ad_weight * torch.mul(axonMSE,axonMSE).float()
+        # bodyRMSE = decrease_weight * torch.mul(bodyMSE,bodyMSE).float()
+        # dendRMSE = decrease_weight * torch.mul(dendMSE,dendMSE).float()
+        # axonRMSE = ad_weight * torch.mul(axonMSE,axonMSE).float()
 
-        return torch.mean((back_one*RMSE + back_zero*(bodyRMSE+dendRMSE+axonRMSE)).float())
+        return torch.mean((back_one*RMSE + back_zero*(RMSE)).float())
 
 class Custom_Adaptive_Gaussian_DistanceMap(torch.nn.Module):
     
