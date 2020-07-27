@@ -2,8 +2,8 @@ import cv2
 import skimage
 import torch
 import numpy as np
-import pydensecrf.densecrf as dcrf
-import pydensecrf.utils as utils
+# import pydensecrf.densecrf as dcrf
+# import pydensecrf.utils as utils
 import scipy
 import numbers
 
@@ -13,17 +13,64 @@ from natsort import natsorted
 from nd2reader import ND2Reader
 from skimage.util.shape import view_as_blocks
 from skimage.filters import threshold_otsu, threshold_yen
+from skimage.morphology import erosion
 
 import torch.nn.functional as F
 from torch.utils.data import  Dataset
 
 from sklearn.model_selection import KFold
+from skimage.morphology import square
 
+# natsort
+# 
 #=====================================================================#
 #============================pre processing===========================#
 #=====================================================================#
-def decode_segmap(image, nc=4,name='full'):
+def EROSION(image,sigma=6):
+    # print(image.shape)
+    image[0] =  erosion(image[0],square(sigma))
+    print(image.shape)
+    return image
 
+
+def decode_segmap(image, nc=4,name='full_4'):
+
+
+    if name =='body':
+        label_colors = np.array([(0, 0, 0),  # 0=background
+                    # 1=cellbody, 2=dendrite, 3=axon
+                    (254, 254, 0)])
+    elif name =='dend':
+        label_colors = np.array([(0,0,0),(254, 24, 254)])
+    elif name =='axon':
+        label_colors = np.array([(0,0,0), (0, 146, 146)])
+    elif name == 'full_4':
+        label_colors = np.array([(0,0,0),(254,254,0),(254,24,254),(0,146,146)])
+    elif name == 'full':
+        label_colors = np.array([(255,255,255),(0,0,0),(254,254,0),(254,24,254),(0,146,146)])
+    elif name == 'inverse':
+        label_colors = np.array([(0,0,0),(254,254,0),(254,254,0),(254,254,0)])
+    elif name == 'convert':
+        label_colors = np.array([(255,255,255),(254,254,0),(254,24,254),(0,146,146)])
+    # print(label_colors.shape)
+    r = np.zeros_like(image).astype(np.uint8)
+    g = np.zeros_like(image).astype(np.uint8)
+    b = np.zeros_like(image).astype(np.uint8)
+    for l in range(0, nc):
+        idx = image == l
+        # idx = (image > 0.5)
+        r[idx] = label_colors[l, 0]
+        g[idx] = label_colors[l, 1]
+        b[idx] = label_colors[l, 2]
+    rgb = np.stack([r, g, b], axis=1)
+    return rgb
+# [0.0721 :background    0.35081569 0.35923216:dendrtie 0.45088235 0.92426118:body 0.9663341:background
+#  0.98877804 1.        ] 2323232
+from torch import sigmoid
+
+def predict_label(image,nc=4,name='full'):
+    image = image.cpu().numpy()
+    # score_output = sigmoid(image.transpose(1,3).transpose(1,2)).data[0].cpu().numpy()
     if name =='body':
         label_colors = np.array([(0, 0, 0),  # 0=background
                     # 1=cellbody, 2=dendrite, 3=axon
@@ -36,49 +83,88 @@ def decode_segmap(image, nc=4,name='full'):
         label_colors = np.array([(0,0,0),(254,254,0),(254,24,254),(0,146,146)])
     elif name == 'inverse':
         label_colors = np.array([(0,0,0),(254,254,0),(254,254,0),(254,254,0)])
+    elif name == 'convert':
+        label_colors = np.array([(255,255,255),(254,254,0),(254,24,254),(0,146,146)])
     # print(label_colors.shape)
-    r = np.zeros_like(image).astype(np.uint8)
-    g = np.zeros_like(image).astype(np.uint8)
-    b = np.zeros_like(image).astype(np.uint8)
+# [0.0721     0.35081569 0.35923216 0.45088235 0.92426118 0.96633412
+#  0.98877804 1.        ] 2323232
+    rgb = []
+    # print(image.shape)
     for l in range(0, nc):
-        idx = image == l
-        r[idx] = label_colors[l, 0]
-        g[idx] = label_colors[l, 1]
-        b[idx] = label_colors[l, 2]
-    rgb = np.stack([r, g, b], axis=1)
+        #each channel 
+        r = np.zeros_like(image[:,l]).astype(np.uint8)
+        g = np.zeros_like(image[:,l]).astype(np.uint8)
+        b = np.zeros_like(image[:,l]).astype(np.uint8)    
+        idx = image[:,l] > 0.5
+        # idx = (image > 0.5)
+        r[idx==1] = label_colors[l, 0]
+        g[idx==1] = label_colors[l, 1]
+        b[idx==1] = label_colors[l, 2]
+        r[idx==0] = 255
+        g[idx==0] = 255
+        b[idx==0] = 255
+        
+        rgb.append(np.stack([r, g, b], axis=1))
+    rgb = np.array(rgb)
+    # print(rgb.shape,rgb[0].shape)
     return rgb
-
 def channel_wise_segmentation(image, nc=4):
 
     label_colors = np.array([(0,0,0),(254,254,0),(254,24,254),(0,146,146)])
     project_image = 0
     
-    print(image.max(),'123')
+    # print(image.max(),'123')
     for i in range(0,nc):        
         r = np.zeros_like(image[:,i]).astype(np.uint8)
         g = np.zeros_like(image[:,i]).astype(np.uint8)
         b = np.zeros_like(image[:,i]).astype(np.uint8)
         # for l in range(0, nc):
         idx = image == 1
-        print(r.max(),'1111')
+        # print(r.max(),'1111')
         r[r==1] = label_colors[i][0]
         g[g==1] = label_colors[i][1]
         b[b==1] = label_colors[i][2]
         rgb = np.stack([r, g, b], axis=1)
         project_image += rgb
-        print(r.max())
+        # print(r.max())
     # print(rgb.shape,'1111')
     return np.array(project_image)
 
+def score_output(image,num_cls=4):
+    label_colors = np.array([(0,0,0),(254,254,0),(254,24,254),(0,146,146)])
+    image = image.cpu().numpy()
+    new_rgb = []
+    for idx_cls in range(num_cls):
+        r = np.zeros_like(image[:,idx_cls]).astype(np.uint8)
+        g = np.zeros_like(image[:,idx_cls]).astype(np.uint8)
+        b = np.zeros_like(image[:,idx_cls]).astype(np.uint8)
+        rgb = np.zeros((image.shape[2], image.shape[3], 3))
+        # print(rgb.shape)
+        image_pred = image[:, idx_cls]
+        image_pred_flag = (image_pred>0.5)
+        r[image_pred_flag==1] = label_colors[idx_cls,0]
+        g[image_pred_flag==1] = label_colors[idx_cls,1]
+        b[image_pred_flag==1] = label_colors[idx_cls,2]
+        r[image_pred_flag==0] = 255
+        g[image_pred_flag==0] = 255
+        b[image_pred_flag==0] = 255
+        rgb[:,:,0] = (r/255.0)
+        rgb[:,:,1] = (g/255.0)
+        rgb[:,:,2] = (b/255.0)
+        new_rgb.append(rgb)
+    return np.array(new_rgb)
+        # if not os.path.exists(os.path.join(args.output_dir, img_base_name_noext)):
+        #     os.makedirs(os.path.join(args.output_dir, img_base_name_noext))
 
 
 def multi_decode(multi_image,state):
     stack_img = []
     
-    for i in range(len(multi_image[0,:])):
-        s_img= decode_segmap(multi_image[:,i],name=state)
+    for image in multi_image:
+        s_img= decode_segmap(image,name=state)
         
         stack_img.append(s_img)
+    print(np.array(stack_img).shape)
     return np.transpose(np.array(stack_img),(1,2,0,3,4))
 
 def ch_channel(img):
@@ -433,3 +519,116 @@ class custom_mydataset_3d(Dataset):
 
         return clip,label2
         
+
+
+import os
+import pickle
+
+import numpy as np
+import torch
+from torch.utils.data.sampler import Sampler
+
+import unspuervised_models
+
+
+def load_model(path):
+    """Loads model and return it without DataParallel table."""
+    if os.path.isfile(path):
+        print("=> loading checkpoint '{}'".format(path))
+        checkpoint = torch.load(path)
+
+        # size of the top layer
+        N = checkpoint['state_dict']['top_layer.bias'].size()
+
+        # build skeleton of the model
+        sob = 'sobel.0.weight' in checkpoint['state_dict'].keys()
+        model = models.__dict__[checkpoint['arch']](sobel=sob, out=int(N[0]))
+
+        # deal with a dataparallel table
+        def rename_key(key):
+            if not 'module' in key:
+                return key
+            return ''.join(key.split('.module'))
+
+        checkpoint['state_dict'] = {rename_key(key): val
+                                    for key, val
+                                    in checkpoint['state_dict'].items()}
+
+        # load weights
+        model.load_state_dict(checkpoint['state_dict'])
+        print("Loaded")
+    else:
+        model = None
+        print("=> no checkpoint found at '{}'".format(path))
+    return model
+
+
+class UnifLabelSampler(Sampler):
+    """Samples elements uniformely accross pseudolabels.
+        Args:
+            N (int): size of returned iterator.
+            images_lists: dict of key (target), value (list of data with this target)
+    """
+
+    def __init__(self, N, images_lists):
+        self.N = N
+        self.images_lists = images_lists
+        self.indexes = self.generate_indexes_epoch()
+
+    def generate_indexes_epoch(self):
+        nmb_non_empty_clusters = 0
+        for i in range(len(self.images_lists)):
+            if len(self.images_lists[i]) != 0:
+                nmb_non_empty_clusters += 1
+
+        size_per_pseudolabel = int(self.N / nmb_non_empty_clusters) + 1
+        res = np.array([])
+
+        for i in range(len(self.images_lists)):
+            # skip empty clusters
+            if len(self.images_lists[i]) == 0:
+                continue
+            indexes = np.random.choice(
+                self.images_lists[i],
+                size_per_pseudolabel,
+                replace=(len(self.images_lists[i]) <= size_per_pseudolabel)
+            )
+            res = np.concatenate((res, indexes))
+
+        np.random.shuffle(res)
+        res = list(res.astype('int'))
+        if len(res) >= self.N:
+            return res[:self.N]
+        res += res[: (self.N - len(res))]
+        return res
+
+    def __iter__(self):
+        return iter(self.indexes)
+
+    def __len__(self):
+        return len(self.indexes)
+
+
+class AverageMeter(object):
+    """Computes and stores the average and current value"""
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
+
+    def update(self, val, n=1):
+        self.val = val
+        self.sum += val * n
+        self.count += n
+        self.avg = self.sum / self.count
+
+
+def learning_rate_decay(optimizer, t, lr_0):
+    for param_group in optimizer.param_groups:
+        lr = lr_0 / np.sqrt(1 + lr_0 * param_group['weight_decay'] * t)
+        param_group['lr'] = lr
+
