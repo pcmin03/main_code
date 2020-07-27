@@ -2,8 +2,6 @@ import cv2
 import skimage
 import torch
 import numpy as np
-import pydensecrf.densecrf as dcrf
-import pydensecrf.utils as utils
 import scipy, nd2reader
 
 from natsort import natsorted
@@ -44,7 +42,7 @@ def multi_decode(multi_image):
     return np.array(stack_img)
 
 def ch_channel(img):
-    return  torch.argmax(img,dim=1).cpu().detach().numpy()
+    return  torch.argmax(img,dim=1).cpu().detach().numpy().astype('uint8')
 
 ##############preprocessing#################
 def preprocessing(nd2Dir='./#12_3.nd2'):
@@ -57,68 +55,29 @@ def preprocessing(nd2Dir='./#12_3.nd2'):
     nd2 = nd2reader.Nd2(nd2Dir)
     stack_images = []
     stack_mitos = []
+    # load Z axis image than stack images
     with ND2Reader(nd2Dir) as images:
         images.iter_axes = 'zc'
         i = 1
         for fov in images:
             if i%2==0:
+                # stack_mitocondria_images
+                fov = cv2.normalize(fov,  normalizedImg, 0, 65535, cv2.NORM_MINMAX).astype('uint16')
                 stack_mitos.append(fov)
             else:
+                # stack_structure_images
+                fov = cv2.normalize(fov,  normalizedImg, 0, 65535, cv2.NORM_MINMAX).astype('uint16')
                 stack_images.append(fov)
             i+=1
 
         stack_images = np.array(stack_images)
         stack_mitos = np.array(stack_mitos)
+        
+        #projection images
+        pro_img = np.max(stack_images,axis=0)
+        pro_mito = np.max(stack_mitos,axis=0)
 
-        
-        _,xsize,ysize=stack_images.shape
-        if xsize > 1024 and ysize > 1024 :
-            dim_size = xsize /2
-            x_mi = int(dim_size-512)
-            x_ma = int(dim_size+512)
-            stack_images = stack_images[:,x_mi:x_ma,x_mi:x_ma]
-            stack_mitos= stack_mitos[:,x_mi:x_ma,x_mi:x_ma]
-        
-        #normalize data#
-        pro_img = cv2.normalize(stack_images,  normalizedImg, 0, 255, cv2.NORM_MINMAX)
-        pro_mito = cv2.normalize(stack_mitos, normalizedImg, 0, 255, cv2.NORM_MINMAX)
-        
-        #threshold background#
-        img_threshold = skimage.filters.threshold_yen(pro_img)
-        mito_threshold = skimage.filters.threshold_otsu(pro_mito)
-        
-        pro_img = (pro_img > img_threshold) * pro_img
-        pro_mito = (pro_mito > mito_threshold) * pro_mito
-
-        pro_img = pro_img.astype('uint8')
-        pro_mito = pro_mito.astype('uint8')
-
-        depth,_,_=pro_img.shape
-        patch_pro_img = view_as_blocks(pro_img,block_shape=(depth,win_size,win_size))
-        
-        _,_,num,depth,size,_=patch_pro_img.shape
-        patch_pro_img = np.reshape(patch_pro_img,(num*num,depth,size,size))
-        
-        pro_img = np.max(patch_pro_img,axis=1)
-        pro_mito = np.max(pro_mito,axis=0)
-        
-        pro_img = skimage.color.gray2rgb(pro_img)
         return pro_img, pro_mito
-
-def make_full_image(patch_img):
-    
-    new_image = []
-    himag = []
-    for j in range(len(patch_img)//4):
-        full_image=cv2.hconcat([patch_img[j*4],patch_img[j*4+1],patch_img[j*4+2],patch_img[j*4+3]])
-        himag.append(full_image)
-        if j==0:
-            continue
-        elif j%3 == 0:
-            new=np.array(himag)
-            full_image2=cv2.vconcat([new[0],new[1],new[2],new[3]])
-            new_image.append(full_image2)
-    return np.array(new_image)[0]
 
 def divide_getlabel(full_image,image,select_channel):
     label2 = skimage.color.rgb2gray(full_image)
@@ -147,7 +106,7 @@ def divide_getlabel(full_image,image,select_channel):
         label2[mask3] = 1
         return scipy.ndimage.morphology.binary_fill_holes(label2 * image).astype('uint8')
 
-def locateComponents(img,minSiz=4,maxSiz=50):
+def locateComponents(img,minSiz=0,maxSiz=10000):
     """Extracts all components from an image"""
 
     out = img.copy()     
@@ -180,64 +139,5 @@ def detecion_box(img,predictions):
         img = skimage.color.gray2rgb(img).astype('uint8')
         img = cv2.rectangle(img, (x,y), (m,n), (255,255,0), 1)
     return img, boxes
-##############loss#################
-class Custom_WeightedCrossEntropyLossV2(torch.nn.Module):
-    """
-    WeightedCrossEntropyLoss (WCE) as described in https://arxiv.org/pdf/1707.03237.pdf
-    Network has to have NO LINEARITY!
-    copy from: https://github.com/wolny/pytorch-3dunet/blob/6e5a24b6438f8c631289c10638a17dea14d42051/unet3d/losses.py#L121
-    """
-    def forward(self, net_output, gt):
-        # print(num_class.)
-        # class_weights = self._class_weights(inp)
-        new_output = torch.argmax(net_output,dim=1)
-        MSEloss = F.mse_loss(new_output.float(),gt.float())
-        weight_MSEloss = 1/(1+MSEloss)
-
-        gt = gt.long()
-        num_classes = net_output.size()[1]
-        i0 = 1
-        i1 = 2
-        pre = net_output
-        while i1 < len(net_output.shape): # this is ugly but torch only allows to transpose two axes at once
-            net_output = net_output.transpose(i0, i1)
-            i0 += 1
-            i1 += 1
-
-        net_output = net_output.contiguous()
-        net_output = net_output.view(-1, num_classes) #shape=(vox_num, class_num)
-
-        gt = gt.view(-1,)
-        # print(net_output.shape,gt.shape)
-        BCEloss = F.cross_entropy(net_output ,gt)
-        return  BCEloss * weight_MSEloss
-
-class DenseCRF(object):
-    def __init__(self, iter_max, pos_w, pos_xy_std, bi_w, bi_xy_std, bi_rgb_std):
-        self.iter_max = iter_max
-        self.pos_w = pos_w
-        self.pos_xy_std = pos_xy_std
-        self.bi_w = bi_w
-        self.bi_xy_std = bi_xy_std
-        self.bi_rgb_std = bi_rgb_std
-
-    def __call__(self, image, probmap):
-        C, H, W = probmap.shape
-
-        U = utils.unary_from_softmax(probmap)
-        U = np.ascontiguousarray(U)
-
-        image = np.ascontiguousarray(image)
-        d = dcrf.DenseCRF2D(W, H, C)
-        d.setUnaryEnergy(U)
-        d.addPairwiseGaussian(sxy=self.pos_xy_std, compat=self.pos_w)
-        d.addPairwiseBilateral(
-            sxy=self.bi_xy_std, srgb=self.bi_rgb_std, rgbim=image, compat=self.bi_w
-        )
-
-        Q = d.inference(self.iter_max)
-        Q = np.array(Q).reshape((C, H, W))
-
-        return Q
 
 
