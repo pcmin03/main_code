@@ -3,6 +3,6 @@ The advance of learning-based segmentation method has achieved remarkable succes
 
 #####Result
 -----------
-![Result](./neuron_model/result/Picture11.png)
+![Result](.pretrain_model_code/neuron_model/result/Picture11.png)
 
  
