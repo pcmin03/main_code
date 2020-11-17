@@ -1,5 +1,4 @@
 import numpy as np
-import skimage 
 import os ,tqdm , random
 from glob import glob
 import torch
@@ -156,7 +155,7 @@ class Trainer():
     def train(self,epochs): 
 
         print("start trainning!!!!")
-        for epoch in range(epochs):
+        for epoch in glob(range(epochs)):
             self.evaluator.reset()
             phase = 'train'
             self.model.train() 
