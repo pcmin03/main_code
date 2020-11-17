@@ -1,9 +1,9 @@
 import numpy as np
 import skimage ,numbers
-import glob, random
+import glob, random, tqdm
 
 from natsort import natsorted
-
+# from glob import glob
 from numpy.lib.stride_tricks import as_strided
 from torch.utils.data import Dataset
 import torch
@@ -14,7 +14,7 @@ from skimage.io import imsave
 
 from skimage.util.shape import view_as_blocks,view_as_windows
 import cv2
-
+# import custom_transform as tr
 import torch.nn.functional as F
 # set image smoothing
 from scipy.ndimage import gaussian_filter
@@ -28,6 +28,10 @@ from transform_3d import *
 import custom_transforms
 from numpy.lib.stride_tricks import as_strided as ast
 
+# import imgaug.augmenters as iaa
+# aug = iaa.CoarseDropout((0.0, 0.05), size_percent=(0.02, 0.25))
+
+# import cupy as cp
 class mydataset_2d(Dataset):
     def __init__(self,imageDir,labelDir,usetranform=True,patchwise=True,
     threshold=0.02,phase='train',isDir=True,preprocessing=True,
@@ -51,11 +55,34 @@ class mydataset_2d(Dataset):
         labels_body = []
         labels_dend = []
         labels_axon = []
+        global_thresh = 0
         
+        selem = disk(2)
+        # skeleton_lee = skeletonize(blobs, method='lee')
         print(f"=====making dataset======")
-        for i in range(len(self.imageDir)):
+        for i in tqdm.tqdm(range(len(self.imageDir))):
             img = skimage.io.imread(self.imageDir[i]).astype('float32') /65535.
             lab = skimage.io.imread(self.labelDir[i])
+                        
+            lab = skimage.color.rgb2gray(lab)
+
+            mask1= (lab > 0.85) & (lab < 0.94)
+            mask2= (lab > 0.3) & (lab < 0.4)
+            mask3= (lab > 0.4) & (lab < 0.84) 
+            mask4= (lab < 0.2) 
+
+            # elif label.ndim == 3:
+            lab[mask1],lab[mask2],lab[mask3] = 1,1,1 # cellbody # dendrite # axon
+            lab[0] = np.where(np.sum(lab,axis=0)>0,np.zeros_like(lab[0]),np.ones_like(lab[0]))
+
+            # if phase == 'train': 
+            for i in range(len(lab)): 
+                if i == 1:
+                    lab[i] = erosion(lab[i], selem)
+                elif i != 0: 
+                    lab[i] = skeletonize(lab[i], method='lee')/255
+                
+            global_thresh += threshold_otsu(img)
             #if 3d data imabe duplicate z axis
             if img.shape[1] > 1024:
                 center = img.shape[1]//2
@@ -64,11 +91,16 @@ class mydataset_2d(Dataset):
                     img = img[:,center-512:center+512,center-512:center+512]
                 elif img.ndim == 2: 
                     img = img[center-512:center+512,center-512:center+512]
-                if lab.ndim == 4:
-                    lab = lab[:,center-512:center+512,center-512:center+512]
-                elif lab.ndim == 2:
-                    lab = lab[:,center-512:center+512,center-512:center+512,:]
-            lab = skimage.color.rgb2gray(lab)
+                
+                lab = lab[:,center-512:center+512,center-512:center+512]
+                
+            
+            skimage.io.imsave('sample.tif',lab[...,np.newaxis].astype('uint8')*255.)
+            
+            # labs.append(lab)
+            # labs = np.array(labs)
+            # for lab in labs:
+            
             if phase=='train':  
                 im_size = patch_size
                 if '3d' in self.dataname:
@@ -105,14 +137,17 @@ class mydataset_2d(Dataset):
                         
                     images.append(view_as_blocks(img ,block_shape=(24,256,256)))
                     labels.append(view_as_blocks(lab ,block_shape=(24,256,256)))
+
                 else: 
                     # this is validation case 
                     images.append(img)
                     labels.append(lab)
         
         print(f"====start patch image=====")
-        self.labels = np.array(labels)
+        print(global_thresh/len(self.imageDir))
         self.imgs = np.array(images)
+        print(self.imgs.shape)
+        self.labels = np.array(labels)
         
         print(self.imgs.shape)
         mean = self.imgs.mean() 
@@ -143,7 +178,7 @@ class mydataset_2d(Dataset):
                 new_label = []
 
                 for i,vlaue in enumerate(self.labels):
-                    mask= (vlaue > 0.2) & (vlaue < 0.9)
+                    mask= (vlaue[0] ==0)
                     count_num = np.sum(mask)
                     
                     if count_num >= ((im_size*im_size)*threshold):
@@ -158,25 +193,29 @@ class mydataset_2d(Dataset):
                 self.imgs = self.imgs.reshape(numi*pa_im*pa_im,zsize,xysize,xysize)
                 self.labels = self.labels.reshape(numi*pa_im*pa_im,zsize,xysize,xysize)
             
-        if self.imgs[0].dtype == 'uint8':
+        # if self.imgs[0].dtype == 'uint8':
 
-            self.L_transform =  transforms.Compose([
-                            transforms.Lambda(lambda image: torch.tensor(np.array(image).astype(np.float32)).unsqueeze(0)),
-                            transforms.Normalize([0],[255])])
+        #     self.L_transform =  transforms.Compose([
+        #                     transforms.Lambda(lambda image: torch.tensor(np.array(image).astype(np.float32)).unsqueeze(0)),
+        #                     transforms.Normalize([0],[255])])
             
-        elif self.imgs[0].dtype == 'uint16':       
-            if self.imgs[0].ndim == 2:      
-                self.L_transform =  transforms.Compose([
-                                transforms.ToTensor()])
+        # elif self.imgs[0].dtype == 'uint16':       
+        #     if self.imgs[0].ndim == 2:      
+        #         self.L_transform =  transforms.Compose([
+        #                         transforms.ToTensor()])
                 
                 # self.L_Normalize = transforms.Normalize((mean),(std))
             # elif self.imgs[0].ndim == 3: 
-        # self.L_transform =  transforms.Compose([
-        #                 transforms.ToTensor(),
-        #                 transforms.Normalize((mean),(std))])
         self.L_transform =  transforms.Compose([
-                        transforms.Lambda(lambda image: torch.tensor(np.array(image).astype(np.float32)).unsqueeze(0)),
-                        custom_transforms.Normalize_3d(0,65535)])
+                        transforms.ToTensor(),
+                        transforms.Normalize((mean),(std))])
+        # self.L_transform =  transforms.Compose([
+        #                 transforms.Lambda(lambda image: torch.tensor(np.array(image).astype(np.float32)).unsqueeze(0)),
+        #                 custom_transforms.Normalize_3d(0,65535)])
+
+                # self.L_transform =  transforms.Compose([
+                #                 transforms.Lambda(lambda image: torch.tensor(np.array(image).astype(np.float32)).unsqueeze(0)),
+                #                 custom_transforms.Normalize_3d(0,65535)])
 
         self.usetranform = usetranform
         self.to_tensor = transforms.ToTensor()
@@ -240,13 +279,14 @@ class mydataset_2d(Dataset):
         axon  = np.array(axon)
         cross = np.array(cross)
 
-        _,multipixel = np.unique(labeldata[cross,2:4],return_counts=True)
+        _,dend_multipixel = np.unique(labeldata[cross,2],return_counts=True)
+        _,axon_multipixel = np.unique(labeldata[cross,3],return_counts=True)
         _,dend_pixel = np.unique(labeldata[dend,2],return_counts=True)
         _,axon_pixel = np.unique(labeldata[axon,3],return_counts=True)
         
         print(f"label variance : {np.unique(labeldata)}")
-        print(f"Number of pixels : {multipixel,dend_pixel,axon_pixel}")
-        need_pixel = (dend_pixel[1]+multipixel[2]) - (axon_pixel[1]+multipixel[1])
+        print(f"Number of pixels : {dend_multipixel,axon_multipixel,dend_pixel,axon_pixel}")
+        need_pixel = (dend_pixel[1]+dend_multipixel[1]) - (axon_pixel[1]+axon_multipixel[1])
         
         add_image = []
         add_label = []
@@ -310,10 +350,10 @@ class mydataset_2d(Dataset):
         else:
             #give ful_label
             # label = label[...,np.newaxis]
-            mask1= (label > 0.85) & (label < 0.94)
-            mask2= (label > 0.3) & (label < 0.4)
-            mask3= (label > 0.4) & (label < 0.84) 
-            mask4= (label < 0.2) 
+            # mask1= (label > 0.85) & (label < 0.94)
+            # mask2= (label > 0.3) & (label < 0.4)
+            # mask3= (label > 0.4) & (label < 0.84) 
+            # mask4= (label < 0.2) 
             
             if '3d' in self.dataname:
                 body_label = label.copy()
@@ -340,22 +380,35 @@ class mydataset_2d(Dataset):
                 back_label[mask2] = 0 # dendrite
                 back_label[mask3] = 0 # axon
                 label= np.stack((back_label,body_label,dend_label,axon_label),axis=0)
-
+                # print(label.shape,'32323')
+                # ch,zsize,xysize,yxsize= label.shape
+                # sample = label.reshape(ch*zsize,xysize,yxsize)[:,:,:,np.newaxis]
+                # skimage.io.imsave('sample.tif',sample.astype('uint8'))
+                # label[0] = np.where(np.sum(label,axis=0)>0,np.zeros_like(label[0]),np.ones_like(label[0]))
                 label = np.array(label).astype('float32')
-            elif label.ndim == 3:
-                label[mask1],label[mask2],label[mask3] = 1,1,1 # cellbody # dendrite # axon
-                label[0] = np.where(np.sum(label,axis=0)>0,np.zeros_like(label[0]),np.ones_like(label[0]))
             
-            elif label.ndim == 2:
-                label[mask1] = 1 # cellbody
-                label[mask2] = 1 # dendrite
-                label[mask3] = 1 # axon
-                label[mask4] = 0 # background
+            # elif label.ndim == 2:
+            #     label[mask1] = 1 # cellbody
+            #     label[mask2] = 1 # dendrite
+            #     label[mask3] = 1 # axon
+            #     label[mask4] = 0 # background
+            #     # print(label.shape,'shape')
 
                 label = np.array(label).astype('float32')
         image = image.astype(np.float64)
-        global_thresh = threshold_yen(image)
-        _mask = np.where(image/65535. > 0.2,np.zeros_like(image),np.ones_like(image))[np.newaxis]
+        global_thresh = threshold_otsu(image)
+        _mask = np.where(image > global_thresh/len(self.imageDir),np.zeros_like(image),np.ones_like(image))[np.newaxis]
         
+        # print(_mask.max(),_mask.min(),_mask.shape)
+        # self.L_transform(
         clip = self.L_transform(image)
+        # print(clip.max(),clip.min(),clip.shape)
+        #make binary image
+        # _mask = self.L_transform(image)
+        # print(clip.max(),clip.min())
+        # b_threshold = threshold_otsu(clip.cpu().numpy())
+        # print(b_threshold)
+        # label[0:1] = clip.cpu().numpy()>0.1
+        # label[0] = _mask 
         return clip.float(),label,_mask
+

@@ -3,29 +3,16 @@ import os ,tqdm , random
 from glob import glob
 import torch
 import torch.nn.functional as F
-import yaml
 
 from torch import nn, optim
-from torchvision import models ,transforms
 from torch.utils.data import DataLoader, Dataset
 from torch.autograd import Variable
 from torch import Tensor
 #custom set#
-from my_network import *
-from neuron_util import *
-from neuron_util import channel_wise_segmentation
-from my_custom_loss import *
-import config
-from mydataset import mydataset_2d
-from mydataset_xray import mydataset_xray
-from my_network3d import ResidualUNet3D
-from self.logger import Logger
-from metrics import *
-import argparse
-import torch.autograd as autograd
 
-from HED import HED
-from RCF import RCF
+from utils.metric import Evaluator, AverageMeter
+
+import torch.autograd as autograd
 
 class Trainer():
     total_train_iter = 0

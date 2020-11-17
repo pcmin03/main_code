@@ -1,6 +1,7 @@
 
 from Distance_loss import * 
 from information_loss import *
+from Garborloss import *
 
 def select_loss(args): 
 
