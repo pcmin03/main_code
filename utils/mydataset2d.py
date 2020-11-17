@@ -1,0 +1,361 @@
+import numpy as np
+import skimage ,numbers
+import glob, random
+
+from natsort import natsorted
+
+from numpy.lib.stride_tricks import as_strided
+from torch.utils.data import Dataset
+import torch
+from skimage.filters import threshold_otsu,threshold_yen , threshold_local
+from torchvision import transforms
+from transforms3d import RandomFlip, RandomRotate90, RandomRotate,ToTensor
+from skimage.io import imsave
+
+from skimage.util.shape import view_as_blocks,view_as_windows
+import cv2
+
+import torch.nn.functional as F
+# set image smoothing
+from scipy.ndimage import gaussian_filter
+from skimage.morphology import skeletonize, thin
+from skimage.morphology import erosion, dilation, opening, closing,disk
+
+from sklearn.preprocessing import MultiLabelBinarizer, OneHotEncoder
+
+from transform_3d import *
+
+import custom_transforms
+from numpy.lib.stride_tricks import as_strided as ast
+
+class mydataset_2d(Dataset):
+    def __init__(self,imageDir,labelDir,usetranform=True,patchwise=True,
+    threshold=0.02,phase='train',isDir=True,preprocessing=True,
+    multiple_scale=False,patch_size=128,stride=50,oversampling=True,
+    dataname='uint16_wise'):
+        
+        self.preprocessing = preprocessing
+        self.isDir = isDir
+        self.multiple_scale = multiple_scale
+        self.phase = phase
+        self.mlb = MultiLabelBinarizer
+        self.dataname = dataname
+        self.imageDir = imageDir
+        self.labelDir = labelDir
+        # useing scribble or edge label
+        images = []
+        labels = []
+        #full_labels
+        labs = []
+        labels_back = []
+        labels_body = []
+        labels_dend = []
+        labels_axon = []
+        
+        print(f"=====making dataset======")
+        for i in range(len(self.imageDir)):
+            img = skimage.io.imread(self.imageDir[i]).astype('float32') /65535.
+            lab = skimage.io.imread(self.labelDir[i])
+            #if 3d data imabe duplicate z axis
+            if img.shape[1] > 1024:
+                center = img.shape[1]//2
+                # print(img.shape)
+                if img.ndim == 3: 
+                    img = img[:,center-512:center+512,center-512:center+512]
+                elif img.ndim == 2: 
+                    img = img[center-512:center+512,center-512:center+512]
+                if lab.ndim == 4:
+                    lab = lab[:,center-512:center+512,center-512:center+512]
+                elif lab.ndim == 2:
+                    lab = lab[:,center-512:center+512,center-512:center+512,:]
+            lab = skimage.color.rgb2gray(lab)
+            if phase=='train':  
+                im_size = patch_size
+                if '3d' in self.dataname:
+                    img = img[4:-3]
+                    lab = lab[4:-3]
+                    ch_size = int(lab.shape[0])
+                    if patchwise == True:
+                        images.append(view_as_blocks(img ,block_shape=(8,im_size,im_size)))
+                        labels.append(view_as_blocks(lab ,block_shape=(8,im_size,im_size)))
+                    else:    
+                        
+                        images.append(view_as_windows(img ,(8,im_size,im_size),stride))
+                        labels.append(view_as_windows(lab ,(8,im_size,im_size),stride))
+
+                else:
+                    if patchwise == True:
+                        images.append(view_as_blocks(img ,block_shape=(im_size,im_size)))
+                        labels.append(view_as_blocks(lab ,block_shape=(4,im_size,im_size)))
+                    else:    
+                        ch_size = int(lab.shape[0])
+                        images.append(view_as_windows(img ,(im_size,im_size),stride))
+                        labels.append(view_as_windows(lab ,(ch_size,im_size,im_size),stride))
+                
+            else:
+                if '3d' in self.dataname:
+                    # make zero patch for z axis
+                    # fix z axis == 24 during training 
+                    print(img.shape,'img.shape')
+                    if img.shape[0] < 24: 
+                        img = np.concatenate((img,np.zeros_like(img)[0:1]),axis=0)
+                        lab = np.concatenate((lab,np.zeros_like(img)[0:1]),axis=0)
+                    img = img[:24]
+                    lab = lab[:24]
+                        
+                    images.append(view_as_blocks(img ,block_shape=(24,256,256)))
+                    labels.append(view_as_blocks(lab ,block_shape=(24,256,256)))
+                else: 
+                    # this is validation case 
+                    images.append(img)
+                    labels.append(lab)
+        
+        print(f"====start patch image=====")
+        self.labels = np.array(labels)
+        self.imgs = np.array(images)
+        
+        print(self.imgs.shape)
+        mean = self.imgs.mean() 
+        std = self.imgs.std()
+        if phase =='train':
+            self.t_trans= custom_transforms.RandomGaussianBlur(90)
+            self.t_trans2= custom_transforms.RandomHorizontalFlip(90)
+            self.t_trans3= custom_transforms.RandomRotate(90)
+            self.t_trans4= custom_transforms.RandomMultiple(90)
+            # normalize3d = custom_transforms.Normalize_3d(0,65535)
+            if '3d' in self.dataname:
+                num,_,patch,_,z_size,im_size,_=self.imgs.shape
+                self.imgs = np.reshape(self.imgs,[num*patch*patch,z_size,im_size,im_size])    
+                self.labels = np.reshape(self.labels,[num*patch*patch,z_size,im_size,im_size])
+            else: 
+                print(self.labels.shape)
+                num,_,_,patch,ch_size,im_size,_ = self.labels.shape
+                self.imgs = np.reshape(self.imgs,[num*patch*patch,im_size,im_size])    
+                self.labels = np.reshape(self.labels,[num*patch*patch,ch_size,im_size,im_size])
+
+            print(f"imglen: {len(self.imgs)},imgshape:{self.imgs.shape}")
+            print(f"lablen:{len(self.labels)},labshape:{self.labels.shape}")
+            print(f"totalmean: {mean},totalstd:{std}")
+            print("=====totalpatch=======")
+
+            if self.preprocessing ==True:    
+                new_image = []
+                new_label = []
+
+                for i,vlaue in enumerate(self.labels):
+                    mask= (vlaue > 0.2) & (vlaue < 0.9)
+                    count_num = np.sum(mask)
+                    
+                    if count_num >= ((im_size*im_size)*threshold):
+                        new_label.append(vlaue)
+                        new_image.append(self.imgs[i])
+                print(len(new_label),'lenght...',len(self.labels))
+                self.imgs = np.array(new_image)
+                self.labels = np.array(new_label)
+        else:
+            if '3d' in self.dataname:
+                numi,_,pa_im,_,zsize,xysize,_  = self.imgs.shape
+                self.imgs = self.imgs.reshape(numi*pa_im*pa_im,zsize,xysize,xysize)
+                self.labels = self.labels.reshape(numi*pa_im*pa_im,zsize,xysize,xysize)
+            
+        if self.imgs[0].dtype == 'uint8':
+
+            self.L_transform =  transforms.Compose([
+                            transforms.Lambda(lambda image: torch.tensor(np.array(image).astype(np.float32)).unsqueeze(0)),
+                            transforms.Normalize([0],[255])])
+            
+        elif self.imgs[0].dtype == 'uint16':       
+            if self.imgs[0].ndim == 2:      
+                self.L_transform =  transforms.Compose([
+                                transforms.ToTensor()])
+                
+                # self.L_Normalize = transforms.Normalize((mean),(std))
+            # elif self.imgs[0].ndim == 3: 
+        # self.L_transform =  transforms.Compose([
+        #                 transforms.ToTensor(),
+        #                 transforms.Normalize((mean),(std))])
+        self.L_transform =  transforms.Compose([
+                        transforms.Lambda(lambda image: torch.tensor(np.array(image).astype(np.float32)).unsqueeze(0)),
+                        custom_transforms.Normalize_3d(0,65535)])
+
+        self.usetranform = usetranform
+        self.to_tensor = transforms.ToTensor()
+        print(f"imglen: {len(self.imgs)},imgshape:{self.imgs.shape}")
+        print(f"lablen:{len(self.labels)},labshape:{self.labels.shape}")
+        
+        if oversampling==True:
+            print("=====oversampling=======")
+            self.imgs,self.labels = self.pre_oversampling(self.imgs,self.labels)
+            print(f"imglen: {len(self.imgs)},imgshape:{self.imgs.shape}")
+            print(f"lablen:{len(self.labels)},labshape:{self.labels.shape}")
+            
+    def pre_oversampling(self,imgs,labeldata):
+        if '3d' in self.dataname:
+            mask1= (labeldata > 0.85) & (labeldata < 0.94)
+            mask2= (labeldata > 0.3) & (labeldata < 0.4)
+            mask3= (labeldata > 0.4) & (labeldata < 0.84) 
+            mask4= (labeldata < 0.2) 
+            
+            body_label = labeldata.copy()
+            body_label[mask4] = 0 #
+            body_label[mask1] = 1 # cellbody
+            body_label[mask2] = 0 # dendrite
+            body_label[mask3] = 0 # axon
+            
+            dend_label = labeldata.copy()
+            dend_label[mask4] = 0 #
+            dend_label[mask1] = 0 # cellbody
+            dend_label[mask2] = 1 # dendrite
+            dend_label[mask3] = 0 # axon
+            
+            axon_label = labeldata.copy() 
+            axon_label[mask4] = 0 #
+            axon_label[mask1] = 0 # cellbody
+            axon_label[mask2] = 0 # dendrite
+            axon_label[mask3] = 1# axon
+            
+            back_label = labeldata.copy()
+            back_label[mask4] = 1 #
+            back_label[mask1] = 0 # cellbody
+            back_label[mask2] = 0 # dendrite
+            back_label[mask3] = 0 # axon
+            labeldata= np.stack((back_label,body_label,dend_label,axon_label),axis=1)
+            
+            labeldata = np.array(labeldata).astype('float32')
+        dend,axon,cross = [],[],[]
+        dend_n,axon_n,cross_n = 0,0,0
+        for num , (i,j) in enumerate(zip(labeldata[:,2],labeldata[:,3])):
+
+            if  i.any() >0 and j.any() > 0:
+                cross_n+=1
+                cross.append(num)
+            elif  i.any() > 0:
+                dend_n += 1
+                dend.append(num)
+            elif  j.any() > 0:
+                axon_n += 1
+                axon.append(num)
+
+        dend  = np.array(dend)
+        axon  = np.array(axon)
+        cross = np.array(cross)
+
+        _,multipixel = np.unique(labeldata[cross,2:4],return_counts=True)
+        _,dend_pixel = np.unique(labeldata[dend,2],return_counts=True)
+        _,axon_pixel = np.unique(labeldata[axon,3],return_counts=True)
+        
+        print(f"label variance : {np.unique(labeldata)}")
+        print(f"Number of pixels : {multipixel,dend_pixel,axon_pixel}")
+        need_pixel = (dend_pixel[1]+multipixel[2]) - (axon_pixel[1]+multipixel[1])
+        
+        add_image = []
+        add_label = []
+        total_axon_pixel = 0
+
+        while need_pixel >= total_axon_pixel:
+            num_axon = np.random.choice(axon,10)
+            add_axon = labeldata[num_axon]
+            _,axon_pixels = np.unique(add_axon,return_counts=True)
+            total_axon_pixel += axon_pixels[1]
+            add_label.append(add_axon)
+            add_image.append(imgs[num_axon])
+
+        add_image = np.array(add_image)
+        add_label = np.array(add_label)
+        if add_label.ndim == 5: 
+            batch,zstack,channel,img_size,_= add_label.shape
+            add_image = add_image.reshape(batch*zstack,img_size,img_size)
+            add_label = add_label.reshape(batch*zstack,channel,img_size,img_size)
+        elif add_label.ndim == 6: 
+            batch,sample,channel,zstack,img_size,_= add_label.shape
+            add_image = add_image.reshape(batch*sample,zstack,img_size,img_size)
+            add_label = add_label.reshape(batch*sample,channel,zstack,img_size,img_size)
+
+        imgs = np.concatenate((imgs,add_image),axis=0)
+        labels = np.concatenate((labeldata,add_label),axis=0)
+
+        return imgs, labels
+
+    def __len__(self):
+        self.number_img = len(self.imgs)
+        return self.number_img
+    
+    def __getitem__(self,index):
+        
+        image = np.array(self.imgs[index])
+        label = np.array(self.labels[index])
+
+        if self.phase =='train':
+            if label.ndim == 3:
+                if 3 in np.unique(np.argmax(label,axis=0)) and np.sum(label[3]) > 200:
+                    sample = {'image':image,'label':label}    
+                    sample = self.t_trans3(self.t_trans2(sample))
+                    image = sample['image']
+                    label = sample['label']
+
+        if self.dataname == 'scribble':
+            mask0= label > 0.95
+            mask1= (label > 0.85) & (label < 0.94)
+            mask2= (label > 0.3) & (label < 0.4)
+            mask3= (label > 0.4) & (label < 0.84) 
+            mask4= (label < 0.2) 
+
+            label[mask0],label[mask1],label[mask2],label[mask3],label[mask4] = 0,1,1,1,0 
+            # ignore part
+            # label[mask1] = 1 # cellbody
+            # label[mask2] = 1 # dendrite
+            # label[mask3] = 1 # axon
+            # label[mask4] = 0 # background
+            label[0] = np.where(np.sum(label,axis=0)>0,np.zeros_like(label[0]),np.ones_like(label[0]))
+        else:
+            #give ful_label
+            # label = label[...,np.newaxis]
+            mask1= (label > 0.85) & (label < 0.94)
+            mask2= (label > 0.3) & (label < 0.4)
+            mask3= (label > 0.4) & (label < 0.84) 
+            mask4= (label < 0.2) 
+            
+            if '3d' in self.dataname:
+                body_label = label.copy()
+                body_label[mask4] = 0 #
+                body_label[mask1] = 1 # cellbody
+                body_label[mask2] = 0 # dendrite
+                body_label[mask3] = 0 # axon
+                
+                dend_label = label.copy()
+                dend_label[mask4] = 0 #
+                dend_label[mask1] = 0 # cellbody
+                dend_label[mask2] = 1 # dendrite
+                dend_label[mask3] = 0 # axon
+                
+                axon_label = label.copy() 
+                axon_label[mask4] = 0 #
+                axon_label[mask1] = 0 # cellbody
+                axon_label[mask2] = 0 # dendrite
+                axon_label[mask3] = 1# axon
+                
+                back_label = label.copy()
+                back_label[mask4] = 1 #
+                back_label[mask1] = 0 # cellbody
+                back_label[mask2] = 0 # dendrite
+                back_label[mask3] = 0 # axon
+                label= np.stack((back_label,body_label,dend_label,axon_label),axis=0)
+
+                label = np.array(label).astype('float32')
+            elif label.ndim == 3:
+                label[mask1],label[mask2],label[mask3] = 1,1,1 # cellbody # dendrite # axon
+                label[0] = np.where(np.sum(label,axis=0)>0,np.zeros_like(label[0]),np.ones_like(label[0]))
+            
+            elif label.ndim == 2:
+                label[mask1] = 1 # cellbody
+                label[mask2] = 1 # dendrite
+                label[mask3] = 1 # axon
+                label[mask4] = 0 # background
+
+                label = np.array(label).astype('float32')
+        image = image.astype(np.float64)
+        global_thresh = threshold_yen(image)
+        _mask = np.where(image/65535. > 0.2,np.zeros_like(image),np.ones_like(image))[np.newaxis]
+        
+        clip = self.L_transform(image)
+        return clip.float(),label,_mask
