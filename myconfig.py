@@ -21,12 +21,13 @@ def my_config():
     parser.add_argument('--mask_trshold',default=0.3,help='set fo end learning rate',type=float)
 
     parser.add_argument('--labmda',default=0.1,help='set fo end learning rate',type=float)
-
+    parser.add_argument('--Kfold',default=10,help='set fo end learning rate',type=int)
     #preprocessing 
     parser.add_argument('--use_median', default=False, action='store_true',help='make binary median image')
 
     parser.add_argument('--patchsize', default=512, help='patch_size',type=int)
     parser.add_argument('--stride', default=60,help='stride',type=int)
+    parser.add_argument('--batch_size', default=60,help='stride',type=int)
     parser.add_argument('--uselabel', default=False, action='store_true',help='make binary median image')
     parser.add_argument('--oversample', default=True, action='store_false',help='oversample')
 
@@ -47,6 +48,7 @@ def my_config():
     parser.add_argument('--NCE',default=False, action='store_true',help='set Normalized Cross entropy')
 
     parser.add_argument('--BCE',default=False, action='store_true',help='set Normalized Cross entropy')
+    parser.add_argument('--cross_validation',default=True, action='store_false',help='set Normalized Cross entropy')
 
     parser.add_argument('--NCDICE',default=False, action='store_true',help='set Normalized Cross entropy')
 
@@ -64,10 +66,9 @@ def my_config():
     parser.add_argument('--RGloss',default='RMSE',help='select reconsturction guassian loss',type=str)
     parser.add_argument('--NCDICEloss',default=1.5,help='select reconsturction guassian loss',type=float)
 
-
     parser.add_argument('--modelname',default='newunet_compare',help='select Garborloss',type=str)
-    parser.add_argument('--activename',default='sigmoid',help='select active',type=str)
+    parser.add_argument('--activation',default='sigmoid',help='select active',type=str)
 
     parser.add_argument('--DISCRIM',default=False,help='set discriminate',type=bool)
 
-    return parser
+    return parser.parse_args()

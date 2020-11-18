@@ -14,8 +14,7 @@ from torch import einsum
 from torch.autograd import Variable
 from sklearn.model_selection import KFold
 from scipy import ndimage
-from neuron_util import *
-from custom_module import *
+
 from skimage.transform import resize
 
 from skimage.morphology import medial_axis, skeletonize

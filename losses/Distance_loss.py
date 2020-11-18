@@ -14,10 +14,8 @@ from torch import einsum
 from torch.autograd import Variable
 from sklearn.model_selection import KFold
 from scipy import ndimage
-from neuron_util import *
-from custom_module import *
-from skimage.transform import resize
 
+from skimage.transform import resize
 from skimage.morphology import medial_axis, skeletonize
     
 ######################################################################
@@ -152,18 +150,17 @@ class TVLoss(nn.Module):
 
 class Custom_RMSE_regularize(torch.nn.Module):
     def __init__(self,weight,distanace_map=False,treshold_value=0.2,
-            select_MAE='RMSE',use_median=False,partial=False,premask=True,clamp=True):
+            select_MAE='RMSE',partial=False,premask=True,clamp=True):
         super(Custom_RMSE_regularize,self).__init__()
         self.weight = weight
         self.dis_map = distanace_map
         self.treshold_value = treshold_value
         self.select_MAE = select_MAE
-        self.use_median = use_median
+        
         self.partial = partial 
         self.premask = premask
         self.clamp = clamp
-        if self.use_median == True: 
-            self.median = MedianPool2d()
+        
         
 
     def make_mRMSE(self,feature):
@@ -185,8 +182,6 @@ class Custom_RMSE_regularize(torch.nn.Module):
             back_mask_img = torch.where(mask_inputs>self.treshold_value,zero_img,one_img)
 
         # L1 loss
-        if self.use_median == True:
-            mask_img = self.median(mask_img)
         if self.partial == True:
 
             back_part = 1-mask_img
@@ -217,24 +212,13 @@ class Custom_RMSE_regularize(torch.nn.Module):
                 return [torch.mean(MAE).float() * float(self.weight),sum_output,back_output]
             elif self.select_MAE == 'RMSE':
                 return [MSE.float() * float(self.weight),sum_output,back_output]
-
         else : 
-            if activation == 'softmax': 
-                # sum_output = torch.sum(feature_output[:,1:4],dim=1).unsqueeze(1)
-                sum_output = self.make_mRMSE(feature_output)
-            elif activation == 'sigmoid':
-                # print(self.partial)
-                sum_output = self.make_mRMSE(feature_output)
+            sum_output = self.make_mRMSE(feature_output)
             
-            back_output = mask_img
-            MAE = torch.abs( mask_img - feature_output)  
-            MSE = torch.mean(torch.mul(MAE,MAE).float())
-
-
         if self.select_MAE == 'MAE':
-            return [torch.mean(sum_output).float() * float(self.weight),sum_output,back_output]
+            return [torch.mean(sum_output).float() * float(self.weight),feature_output[:,2:3],feature_output[:,3:4]]
         elif self.select_MAE == 'RMSE':
-            return [torch.mean(torch.pow(sum_output,2)).float() * float(self.weight),sum_output,back_output]
+            return [torch.mean(torch.pow(sum_output,2)).float() * float(self.weight),feature_output[:,2:3],feature_output[:,3:4]]
 
 ######################################################################
 

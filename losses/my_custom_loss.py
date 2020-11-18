@@ -1,20 +1,20 @@
 
-from Distance_loss import * 
-from information_loss import *
-from Garborloss import *
+from .Distance_loss import * 
+from .information_loss import *
+from .Garborloss import *
 
 def select_loss(args): 
 
     lossdict = dict()
     labelname = ""
     #suggest loss
-    if recon_gau == True:
-        criterion = Custom_Adaptive_gausian_DistanceMap(float(args.weight),distanace_map=args.class_weight,select_MAE=use_active,
-                                                        treshold_value=bi_value,back_filter=args.back_filter,premask=args.premask)
+    if args.RECONGAU == True:
+        criterion = Custom_Adaptive_gausian_DistanceMap(float(args.weight),distanace_map=args.class_weight,select_MAE=args.Aloss,
+                                                        treshold_value=args.mask_trshold,back_filter=args.back_filter,premask=args.premask)
         if args.back_filter== True:
             labelname += 'back_filter_'
-        labelname += 'seg_gauadaptive_'+str(use_active)+'_'
-  
+        labelname += 'seg_gauadaptive_'+str(args.Aloss)+'_'+str(int(args.weight))+'_'
+        
     #compare loss
     elif args.RCE == True:
         criterion = noiseCE(int(args.weight),RCE=args.RCE)
@@ -32,30 +32,29 @@ def select_loss(args):
         criterion = NCDICEloss(r=args.NCDICEloss)
         labelname += 'NCDICE_'+str(args.NCDICEloss)+'_'
 
-    elif adce == True:
-        criterion = Custom_CE(int(args.weight),Gaussian=False,active=active)
+    elif args.ADCE == True:
+        criterion = Custom_CE(int(args.weight),Gaussian=False,active=args.activation)
         labelname += 'seg_adaptiveCE_'    
     lossdict.update({'mainloss':criterion})
     
-    if recon == True:
-        reconstruction_loss = Custom_RMSE_regularize(float(labmda),treshold_value=bi_value,select_MAE=use_active2,
-                                                    use_median=use_median,partial = partial_recon,premask=args.premask,clamp=args.clamp)
+    if args.RECON == True:
+        reconstruction_loss = Custom_RMSE_regularize(float(args.labmda),treshold_value=args.mask_trshold,select_MAE=args.Rloss,
+                                                    partial = args.partial_recon,premask=args.premask,clamp=args.clamp)
         
         lossdict.update({'reconloss':reconstruction_loss})
-        if partial_recon == True:
-            labelname += 'part_reconloss2_'+str(use_active2)+'_' + str(labmda)+'_'
+        if args.partial_recon == True:
+            labelname += 'part_reconloss2_'+str(args.Rloss)+'_' + str(args.labmda)+'_'
         else : 
-            labelname += 'reconloss_'+str(use_active2)+'_' + str(labmda)+'_'
+            labelname += 'reconloss_'+str(args.Rloss)+'_' + str(args.labmda)+'_'
         
-    labelname += str(bi_value) +'_'
-    elif total_var_loss == True:
-        tv_loss = TVLoss(TVLoss_weight=tv_value)
-        labelname += 'TVLoss_'+str(tv_value)+'_'
-    elif gabor_loss == True:
-        labelname += 'garbor3_'+str(use_active3)+'_'+str(labmda2)+'_'
+    if args.TVLOSS == True:
+        tv_loss = TVLoss(TVLoss_weight=0.001)
+        labelname += 'TVLoss_'+str(0.001)+'_'
+    elif args.Gaborloss == True:
+        labelname += 'garbor3_'+str(args.Gloss)+'_'+str(args.labmda2)+'_'
         if use_label == True:
             labelname += 'uselabel_'    
-        gabors = dont_train(Custom_Gabor_loss(device=device,weight=float(labmda2),use_median=use_median,use_label=use_label).to(device))
+        gabors = dont_train(Custom_Gabor_loss(device=device,weight=float(args.labmda2),use_median=use_median,use_label=use_label).to(device))
         lossdict.update({'gaborloss':gabors})
         
-    return lossdict, labelname+str(int(args.weight))+'_'+str(data_name)+'_' 
+    return lossdict, labelname +str(args.mask_trshold)

@@ -3,22 +3,31 @@ import numpy as np
 # Loss Meter
 class AverageMeter(object):
     """Computes and stores the average and current value"""
-    def __init__(self):
+    def __init__(self,num_class):
         self.reset()
+        self.reset_dict()
+        self.num_class = num_class
 
     def reset(self):
         self.val = 0
         self.avg = 0
         self.sum = 0
         self.count = 0
-        self.cls_loss = 0
-        self.tvl_loss = 0
-        self.gab_loss = 0
-        self.t_loss = 0
-        self.avg_IOU =0 
-        self.avg_F1 = 0
-        self.total_loss = []
-        
+
+    def reset_dict(self):
+        self.IOU_scalar = dict()
+        self.precision_scalar = dict()
+        self.recall_scalr = dict()
+        self.F1score_scalar = dict()
+
+    def update_dict(self,result_dicts):
+
+        for i in range(self.num_class):
+            self.IOU_scalar.update({'IOU_'+str(i):result_dicts['IOU'][i]})
+            self.precision_scalar.update({'precision_'+str(i):result_dicts['precision'][i]})
+            self.recall_scalr.update({'recall_'+str(i):result_dicts['recall'][i]})
+            self.F1score_scalar.update({'F1_'+str(i):result_dicts['F1'][i]})
+    
     def update(self, val, n=1):
         self.val = val
         self.sum += val * n

@@ -13,14 +13,16 @@ from torch.autograd import Variable
 from torch import Tensor
 #custom set#
 
-from my_network3d import ResidualUNet3D
 from utils.logger import Logger
-from utils.mydataset import *
 from utils.neuron_util import make_path
+
+
+from datacode.mydataset import *
+
 from models.mynetwork import init_model
 from losses.my_custom_loss import select_loss
-
-import Trainer
+from myconfig import *
+from trainer import Trainer
 
 def main(args): 
     
@@ -39,17 +41,17 @@ def main(args):
     Dirlist = select_data(args)
 
     #cross validation
-    trainset,validset = divide_kfold(Dirlist,k=args.foldnum,dataname=args.data_name,cross_validation == args.cross_validation)
+    trainset,validset = divide_kfold(Dirlist,args)
 
     #import dataset
     MyDataset = make_dataset(trainset,validset,args)
 
     #select loss
     loss_list,lossname = select_loss(args)
-    
+    print(lossname,'1111')
     # logger 
     main_path, valid_path = make_path(args)
-
+    print(main_path,valid_path,'1111')
     #set log
     logger = Logger(main_path,valid_path+lossname,delete=args.deleteall)
 
@@ -59,26 +61,23 @@ def main(args):
         gen.load_state_dict(checkpoint['gen_model'])
 
     #import trainer
-    Trainer = Trainer(model, Mydataset,loss_list,optimizer,scheduler,logger,args)
+    Learner = Trainer(model, MyDataset,loss_list,logger,args,device)
     
-    Trainer.train(args)
-    Trainer.test()
+    Learner.train()
+    # Trainer.test()
 
 
 if __name__ == '__main__': 
-    args = config
-    print(adce,'adce')
-    print(adrmse,'adrmse')
-    print(recon_gau,'recon_gau')
-    print(recon,'recon')
-    print(gabor_loss,'gabor_loss')
+    args = my_config()
+    print(args.ADCE,'ADCE')
+    print(args.RECONGAU,'RECONGAU')
+    print(args.RECON,'RECON')
     print('==============================')
     print(args.RCE,'RCE')
     print(args.NCE,'NCE')
     print(args.NCDICE,'NCDICE')
     print(args.BCE,'BCE')
-
-    main(config)
+    main(args)
 
 
 

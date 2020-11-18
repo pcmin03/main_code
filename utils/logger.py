@@ -9,19 +9,19 @@ import pandas as pd
 class Logger(object):
     ### save dictionary ###
     def __init__(self, main_path,valid_path,delete=False):
-        self.log_dir = main_path + valid_path
+        self.log_dir =  main_path + valid_path
         #make deploy path
         if not os.path.exists(self.log_dir):
             print(f'Make_deploy_Dir{self.log_dir}')
             os.makedirs(self.log_dir)
         
-        merge_path = '../merge_path'+ (main_path-"..")
+        merge_path = main_path+'merge_path/'
             
         if not os.path.exists(merge_path):
             print(f'Make_logger:{merge_path}')
             os.makedirs(merge_path)
 
-        merge_path += merge_path + valid_path
+        merge_path += valid_path
         if not os.path.exists(merge_path):
             print(f'Make_logger:{merge_path}')
             os.makedirs(merge_path)
@@ -30,7 +30,7 @@ class Logger(object):
             print(f'remove_Dir:{merge_path,self.log_dir}')
             shutil.rmtree(self.log_dir+'*',ignore_errors=True)  
             shutil.rmtree(merge_path,ignore_errors=True)
-        
+        print(merge_path,self.log_dir )
         self.writer = SummaryWriter(merge_path)
         
     def summary_images(self,images_dict,step):
@@ -41,7 +41,6 @@ class Logger(object):
     def summary_scalars(self,scalar_dict,step,tag='loss',phase='valid'):
         ### list of scaler ###
         for i, scalar in enumerate(scalar_dict):
-
             if tag in scalar:
                 self.writer.add_scalar(str(tag)+'/'+str(phase)+str(scalar),scalar_dict[scalar],step)
 
@@ -50,11 +49,6 @@ class Logger(object):
             else:
                 self.writer.add_scalar(str(phase)+'/'+str(scalar),scalar_dict[scalar],step)
             
-    def summary_3dimages(self,images_dict,step):
-        ### list of stack_images ###
-        for i, img in enumerate(images_dict):
-            self.writer.add_images(str(img),images_dict[img],step)
-
     def changedir(self,changedir='result',delete=True):
         
         save_dir = self.log_dir + changedir +'/'
@@ -78,14 +72,21 @@ class Logger(object):
             
             #change NCHW to NHWC save stack_image of TIF file
             #3d image
-            print(images_dict[img][num].shape,img)
-            if images_dict[img][num].ndim == 4:
-                result_image = np.transpose(images_dict[img][num],[0,2,3,1])
+            print(images_dict[img].shape,img)
+            if images_dict[img].ndim == 4:
+                result_image = np.transpose(images_dict[img])
             #2d image
-            elif images_dict[img][num].ndim ==3:
-                result_image = np.transpose(images_dict[img][num],[1,2,0])
+            elif images_dict[img].ndim ==3:
+                result_image = np.transpose(images_dict[img])
 
             imsave(save_dir+str(img)+str(step)+'.tif',result_image)
+    
+    def make_stack_image(self,image_dict):
+        for i, img in enumerate(image_dict):
+            image_dict[img] = image_dict[img].detach().cpu().nump()
+            image_dict[img] = np.swapaxis(image_dict[img],0,3)[...,0:1]
+
+        return image_dict 
 
     def print_value(self,vlaues,state='train'):
         if state == 'train':

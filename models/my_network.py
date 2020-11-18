@@ -10,7 +10,6 @@ import segmentation_models_pytorch as smp
 
 from torch.autograd import Variable
 
-from custom_module import *
 # from resnet import *
 # from resnet import *
 #=====================================================================#
@@ -885,10 +884,6 @@ class garbor_pretrain_unet(nn.Module):
 def pretrain_efficent_unet():
     return smp.Unet('efficientnet-b3',in_channels=1,classes=4,activation='softmax')
 
-import resnet_casenet 
-import resnet_casenet101
-def pretrain_casenet():
-    return resnet_casenet101.casenet101()
 
 class pretrain_deeplab_unet(nn.Module):
     def __init__(self,in_channels=1,classes=4,plus = True,active='sigmoid'):
@@ -1116,96 +1111,6 @@ class classification_model(nn.Module):
         # x = F.sigmoid(x)
         return x
 
-
-
-# class BaseNet(nn.Module):
-#     def __init__(self, nclass, backbone, aux, se_loss, dilated=True, norm_layer=None,
-#                  base_size=576, crop_size=608, mean=[.485, .456, .406],
-#                  std=[.229, .224, .225], root='./pretrain_models',
-#                  multi_grid=False, multi_dilation=None):
-#         super(BaseNet, self).__init__()
-#         self.nclass = nclass
-#         self.aux = aux
-#         self.se_loss = se_loss
-#         self.mean = mean
-#         self.std = std
-#         self.base_size = base_size
-#         self.crop_size = crop_size
-#         # copying modules from pretrained models
-#         if backbone == 'resnet50':
-#             self.pretrained = resnet.resnet50(pretrained=True, dilated=dilated,
-#                                               norm_layer=norm_layer, root=root,
-#                                               multi_grid=multi_grid, multi_dilation=multi_dilation)
-#         elif backbone == 'resnet101':
-#             self.pretrained = resnet.resnet101(pretrained=True, dilated=dilated,
-#                                                norm_layer=norm_layer, root=root,
-#                                                multi_grid=multi_grid,multi_dilation=multi_dilation)
-#         elif backbone == 'resnet152':
-#             self.pretrained = resnet.resnet152(pretrained=True, dilated=dilated,
-#                                                norm_layer=norm_layer, root=root,
-#                                                multi_grid=multi_grid, multi_dilation=multi_dilation)
-#         else:
-#             raise RuntimeError('unknown backbone: {}'.format(backbone))
-#         # bilinear upsample options
-#         self._up_kwargs = up_kwargs
-
-#     def base_forward(self, x):
-#         x = self.pretrained.conv1(x)
-#         x = self.pretrained.bn1(x)
-#         x = self.pretrained.relu(x)
-#         x = self.pretrained.maxpool(x)
-#         c1 = self.pretrained.layer1(x)
-#         c2 = self.pretrained.layer2(c1)
-#         c3 = self.pretrained.layer3(c2)
-#         c4 = self.pretrained.layer4(c3)
-#         return c1, c2, c3, c4
-
-#     def evaluate(self, x, target=None):
-#         pred = self.forward(x)
-#         if isinstance(pred, (tuple, list)):
-#             pred = pred[0]
-#         if target is None:
-#             return pred
-#         correct, labeled = batch_pix_accuracy(pred.data, target.data)
-#         inter, union = batch_intersection_union(pred.data, target.data, self.nclass)
-#         return correct, labeled, inter, union
-
-from base import BaseNet
-# import dilatedresnet as di_resnet
-
-class DANet(BaseNet):
-    r"""Fully Convolutional Networks for Semantic Segmentation
-    Parameters
-    ----------
-    nclass : int
-        Number of categories for the training dataset.
-    backbone : string
-        Pre-trained dilated backbone network type (default:'resnet50'; 'resnet50',
-        'resnet101' or 'resnet152').
-    norm_layer : object
-        Normalization layer used in backbone network (default: :class:`mxnet.gluon.nn.BatchNorm`;
-    Reference:
-        Long, Jonathan, Evan Shelhamer, and Trevor Darrell. "Fully convolutional networks
-        for semantic segmentation." *CVPR*, 2015
-    """
-    def __init__(self, nclass=4, backbone='resnet50', aux=False, se_loss=False, norm_layer=nn.BatchNorm2d, **kwargs):
-        super(DANet, self).__init__(nclass, backbone, aux, se_loss, norm_layer=norm_layer, **kwargs)
-        self.head = DANetHead(2048, nclass, norm_layer)
-
-    def forward(self, x):
-        imsize = x.size()[2:]
-        _, _, c3, c4 = self.base_forward(x)
-
-        x = self.head(c4)
-        x = list(x)
-        x[0] = F.upsample(x[0], imsize, **self._up_kwargs)
-        x[1] = F.upsample(x[1], imsize, **self._up_kwargs)
-        x[2] = F.upsample(x[2], imsize, **self._up_kwargs)
-
-        # outputs = [x[0]]
-        # outputs.append(x[1])
-        # outputs.append(x[2])
-        return [x[0],x[1],x[2]]
 
         
 class DANetHead(nn.Module):

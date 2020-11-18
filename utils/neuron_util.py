@@ -1,10 +1,9 @@
-import cv2
-import skimage
+import cv2,skimage
 import torch
 import numpy as np
 # import pydensecrf.densecrf as dcrf
 # import pydensecrf.utils as utils
-import scipy
+import scipy,os
 import numbers, glob
 from glob import glob 
 from numpy.lib.stride_tricks import as_strided
@@ -30,15 +29,15 @@ from torch.nn.modules.utils import _pair, _quadruple
 #=====================================================================#
 def make_path(args):
     #activation name, 
-    modelsave_dir = '../'+str(args.model)+'model'+str(args.data_name)+'/'
+    modelsave_dir = '../'+str(args.modelname)+'_'+str(args.datatype)+'/'
     if not os.path.exists(modelsave_dir):
         print(f' Make_save_Dir : {modelsave_dir}')
         os.makedirs(modelsave_dir)
-        
+    valdation_dir = str(args.knum)+str(args.activation)+'_'+str(args.patchsize)+'_'
     if args.oversample == True:
-        modelsave_dir += 'oversample_'
+        valdation_dir += 'oversample_'
         
-    return modelsave_dir, str(knum)+str(args.active)+'_'+str(args.patchsize)+'_'
+    return modelsave_dir, valdation_dir
 
 def EROSION(image,sigma=6):
     # print(image.shape)
