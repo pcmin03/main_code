@@ -98,21 +98,22 @@ class RandomHorizontalFlip(object):
 
 class Normalize_3d:
 
-    def __init__(self, min_value, max_value, **kwargs):
-        assert max_value > min_value
-        self.min_value = min_value
-        self.value_range = max_value - min_value
-
+    def __init__(self, mean, std, **kwargs):
+        # assert max_value > min_value
+        # self.min_value = min_value
+        # self.value_range = max_value - min_value
+        self.mean = mean 
+        self.std = std
     def __call__(self, m):
         # m /= float(self.max_value)
         # m -= torch.mean(m)
         # m /= torch.std(m)
 
-        # img -= self.mean
-        # img /= self.std
+        m -= self.mean
+        m /= self.std
 
-        norm_0_1 = (m - self.min_value) / self.value_range
-        return norm_0_1
+        # norm_0_1 = (m - self.min_value) / self.value_range
+        return m
 
 class RandomRotate(object):
     def __init__(self, degree):

@@ -12,13 +12,14 @@ from torch import Tensor
 #custom set#
 
 from utils.matrix import Evaluator, AverageMeter
-
+from utils.neuron_util import decode_segmap
 import torch.autograd as autograd
 
 class Trainer():
     total_train_iter = 0
     best_epoch = 0 
     best_axon_recall = 0
+    
     def __init__(self,model, Mydataset,loss_list,logger,args,device):
         
         self.model = model 
@@ -47,10 +48,10 @@ class Trainer():
         self.recon_loss.reset()
 
         for i, batch in enumerate(tqdm(self.Mydataset[phase])):
-
+            
             self._input, self._label = Variable(batch[0]).to(self.device), Variable(batch[1]).to(self.device)
             mask_ = Variable(batch[2]).to(self.device)         
-            
+            print(self._input.shape)
             self.optimizer.zero_grad()
             torch.autograd.set_detect_anomaly(True)
 
@@ -97,67 +98,47 @@ class Trainer():
         for param_group in optimizer.param_groups:
             return param_group['lr']
 
-    def make_stack_image(self,image):
-        
-        image = image.detach().cpu().nump()
-        image = np.swapaxis(image,0,3)[...,0:1]
-        return image
-
-    def deployresult(self):
+    def deployresult(self,epoch):
         print(f"label shape : {self._label.shape},featuer shape:,{self.prediction_map.shape},self.predict shape:{self.predict.shape}")
-        print(self.sum_output.shape,self.back_output.shape )
-
-        save_stack_images = {'v_la':self.label,'_input':self._input,
-                            'precision':precision,'prediction_map':self.prediction_map}
         
-        self.logger.make_stack_image(save_stack_images)
+        save_stack_images = {'_label':self._label * 255. ,'_input':self._input * 65535,
+                            'prediction_map':self.prediction_map,
+                            'predict_channe_wise':self.predict}
 
+        # self._input = cv2.normalize(self._input,  normalizedImg, 0, 65535 , cv2.NORM_MINMAX)
 
-        self.make_stack_image(self._label) * 255.
-        self.make_stack_image(self.prediction_map)
-        self.make_stack_image(self.predict)
+        save_stack_images = self.logger.make_stack_image(save_stack_images)
+        pre_body = decode_segmap(torch.argmax(self.predict,dim=1).detach().cpu().numpy())
+        pre_body = np.transpose(pre_body,(0,2,3,1))
 
-        v_la = v_la.cpu().detach().numpy() * 50.
-        print(v_la.max(),v_la.min())
-        # v_la = cv2.normalize(v_la,  normalizedImg, 0, 255 , cv2.NORM_MINMAX).astype('uint8')
-        zero_img = torch.zeros_like(self._input)
-        one_img = torch.ones_like(self._input)
-        mask_ = mask_.detach().cpu().numpy()
-
-        self._input = self._input.detach().cpu().numpy()
-        self._input = cv2.normalize(self._input,  normalizedImg, 0, 65535 , cv2.NORM_MINMAX)
-        pre_body = decode_segmap(self.predict)[:,np.newaxis]
+        save_stack_images['_label'] = save_stack_images['_label'].astype('uint8')
+        save_stack_images['prediction_map'] = save_stack_images['prediction_map'].astype('uint16')
+        save_stack_images.update({'prediction_result':pre_body.astype('uint8')})
         
-        self.prediction_map = self.prediction_map.unsqueeze(2).cpu().numpy()
-        self.prediction_map = cv2.normalize(self.prediction_map,  normalizedImg, 0, 255 , cv2.NORM_MINMAX)
-
-        print(f"label shape : {v_la.shape},featuer shape:,{self.prediction_map.shape},self.prediction shape:{precision.shape}")
-        print(f"pre_body shape : {pre_body.shape}")
-
-
         self.logger.save_images(save_stack_images,epoch)
-
-    def save_model(self):
-        if  self.evaluator.Class_F1score[3] > best_axon_recall :
+        self.logger.summary_images(save_stack_images,epoch)
+        
+    def save_model(self,epoch):
+        if  self.evaluator.Class_F1score[3] > self.best_axon_recall :
             torch.save({"self.model_model":self.model.state_dict(),
                     "optimizer":self.optimizer.state_dict(),
                     "epochs":epoch},
-                    path+"bestsave_models{}.pt")
+                    self.logger.log_dir+"bestsave_models{}.pt")
             print('save!!!')
             best_axon = self.evaluator.Class_IOU[3]
-            best_axon_recall = self.evaluator.Class_F1score[3]
+            self.best_axon_recall = self.evaluator.Class_F1score[3]
             F1best = self.evaluator.Class_F1score[3]
             self.best_epoch = epoch
                     
         torch.save({"self.model_model":self.model.state_dict(),
                 "optimizerG":self.optimizer.state_dict(),
                 "epochs":epoch},
-                path+"lastsave_models{}.pt")
+                self.logger.log_dir+"lastsave_models{}.pt")
 
     def train(self): 
 
         print("start trainning!!!!")
-        for epoch in tqdm(range(self.epochs)):
+        for epoch in range(self.epochs):
             self.evaluator.reset()
             phase = 'train'
             self.model.train() 
@@ -167,7 +148,7 @@ class Trainer():
                 phase = 'valid'
                 self.model.eval()            
                 result_dict = self.train_one_epoch(epoch,phase)
-                self.deployresult()
+                self.deployresult(epoch)
                 self.save_model(epoch)
 
                 

@@ -9,7 +9,7 @@ import pandas as pd
 class Logger(object):
     ### save dictionary ###
     def __init__(self, main_path,valid_path,delete=False):
-        self.log_dir =  main_path + valid_path
+        self.log_dir =  main_path + valid_path+'/'
         #make deploy path
         if not os.path.exists(self.log_dir):
             print(f'Make_deploy_Dir{self.log_dir}')
@@ -36,7 +36,13 @@ class Logger(object):
     def summary_images(self,images_dict,step):
         ### list of image ###
         for i, img in enumerate(images_dict):
-            self.writer.add_image(str(img),images_dict[img],step)
+            if images_dict[img].dtype == 'uint16':
+                normalizedImg = (1024,1024)
+                images_dict[img] = cv2.normalize(images_dict[img],  normalizedImg, 0,255 , cv2.NORM_MINMAX).astype('uint8')
+            if images_dict[img].ndim == 4: 
+                self.writer.add_images(str(img),images_dict[img],step,dataformats='NHWC')
+            elif images_dict[img].ndim == 3:
+                self.writer.add_image(str(img),images_dict[img],step,dataformats='HWC')
 
     def summary_scalars(self,scalar_dict,step,tag='loss',phase='valid'):
         ### list of scaler ###
@@ -64,7 +70,6 @@ class Logger(object):
 
     def save_images(self,images_dict,step):
         ### save images ###
-        num = random.randint(0, self.batch_size-1)
         num = 0
         save_dir = self.log_dir
         
@@ -73,18 +78,25 @@ class Logger(object):
             #change NCHW to NHWC save stack_image of TIF file
             #3d image
             print(images_dict[img].shape,img)
-            if images_dict[img].ndim == 4:
-                result_image = np.transpose(images_dict[img])
+            # if images_dict[img].ndim == 4:
+            #     result_image = np.transpose(images_dict[img])
             #2d image
-            elif images_dict[img].ndim ==3:
-                result_image = np.transpose(images_dict[img])
+            # elif images_dict[img].ndim ==3:
+                # result_image = np.transpose(images_dict[img])
 
-            imsave(save_dir+str(img)+str(step)+'.tif',result_image)
+            imsave(save_dir+str(img)+str(step)+'.tif',images_dict[img])
     
     def make_stack_image(self,image_dict):
         for i, img in enumerate(image_dict):
-            image_dict[img] = image_dict[img].detach().cpu().nump()
-            image_dict[img] = np.swapaxis(image_dict[img],0,3)[...,0:1]
+            print(image_dict[img].shape,img)
+            image_dict[img] = image_dict[img].detach().cpu().numpy()
+            image_dict[img] = np.transpose(image_dict[img],(1,2,3,0))[...,0:1]
+            # image_dict[img] = np.swapaxes(image_dict[img],0,-1)[...,0:1]
+
+            print(image_dict[img].shape,img)
+        image_dict['_input'] = cv2.normalize(image_dict['_input'],(1024,1024), 0, 65535 , cv2.NORM_MINMAX).astype('uint16')
+        image_dict['prediction_map'] = cv2.normalize(image_dict['prediction_map'],(1024,1024), 0, 65535 , cv2.NORM_MINMAX)
+        image_dict['predict_channe_wise'] = cv2.normalize(image_dict['predict_channe_wise'],(1024,1024), 0, 65535 , cv2.NORM_MINMAX).astype('uint16')
 
         return image_dict 
 

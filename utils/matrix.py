@@ -98,15 +98,15 @@ class Evaluator(object):
         self.confusion_matrix = np.zeros((self.num_class,) * 2)
 
     def update(self): 
-        _,Class_IOU,_ = self.Mean_Intersection_over_Union()
+        _,self.Class_IOU,_ = self.Mean_Intersection_over_Union()
         # Acc_class,Class_ACC,wo_back_ACC = self.Pixel_Accuracy_Class()
-        Class_precision, Class_recall,Class_F1score = self.Class_F1_score()
+        self.Class_precision, self.Class_recall,self.Class_F1score = self.Class_F1_score()
         # _, _,Class_Fbetascore = self.Class_Fbeta_score(beta=betavalue)
 
-        total_dict = {'IOU':Class_IOU,
-                    'precision':Class_precision,
-                    'recall':Class_recall,
-                    'F1':Class_F1score}
+        total_dict = {'IOU':self.Class_IOU,
+                    'precision':self.Class_precision,
+                    'recall':self.Class_recall,
+                    'F1':self.Class_F1score}
 
         return total_dict
 

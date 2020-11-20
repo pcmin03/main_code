@@ -5,6 +5,7 @@ import segmentation_models_pytorch as smp
 from torch.autograd import Variable
 
 from .my_network import *  
+from .my_network3d import ResidualUNet3D
 def dont_train(net):
     '''
     set training parameters to false.
@@ -45,7 +46,7 @@ def init_model(args,device):
         
             
     elif args.modelname =='multinewunet':
-            gen = pretrain_multi_unet(1,1,args.activation).to(device)
+        gen = pretrain_multi_unet(1,1,args.activation).to(device)
 
     elif args.modelname =='newmultinewunet':
         gen = pretrain_multi_unet(1,1,args.activation).to(device)

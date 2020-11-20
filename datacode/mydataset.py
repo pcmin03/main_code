@@ -21,6 +21,7 @@ def resetseed(random_seed):
     torch.cuda.manual_seed(random_seed)
 #  kfold data
 def divide_kfold(Datadir,args):
+
     imageDir,labelDir,testDir,tlabelDir = Datadir
     images = np.array(natsorted(glob(imageDir+'*')))
     labels = np.array(natsorted(glob(labelDir+'*')))
@@ -52,6 +53,8 @@ def divide_kfold(Datadir,args):
         label_valid = valid[test_num]
         
     else: 
+        image_train = images
+        label_train = labels
         image_valid = np.array(natsorted(glob(testDir+'*')))
         label_valid = np.array(natsorted(glob(tlabelDir+'*')))
     # print([image_train,image_valid],[label_train,label_valid])
@@ -133,6 +136,20 @@ def make_dataset(trainset,validset,args):
                             1, 
                             shuffle = False,
                             num_workers = num_workers)}
+    elif '3d' in args.datatype: 
+        from .mydataset3d import mydataset_3d 
+        print(args.datatype,'00000000000000000000000')
+        MyDataset = {'train': DataLoader(mydataset_3d(trainset[0],validset[0],args.patchsize,
+                            args.stride,args.oversample,args.datatype,phase='train'),
+                            10, 
+                            shuffle = True,
+                            num_workers = num_workers),
+                    'valid' : DataLoader(mydataset_3d(trainset[1],validset[1],args.patchsize,
+                            args.stride,False,args.datatype,phase='valid'),
+                            1, 
+                            shuffle = False,
+                            num_workers = num_workers)}
+
     else:  
         from .mydataset2d import mydataset_2d 
 

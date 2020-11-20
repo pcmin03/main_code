@@ -21,6 +21,7 @@ from skimage.morphology import skeletonize, thin
 from skimage.morphology import erosion, dilation, opening, closing,disk
 
 from sklearn.preprocessing import MultiLabelBinarizer, OneHotEncoder
+from skimage.transform import resize 
 
 import datacode.custom_transforms as custom_transforms
 
@@ -52,6 +53,7 @@ class mydataset_xray(Dataset):
             lab = []
             for la in self.labelDir: 
                 part_label = skimage.io.imread(la[i])
+                print(part_label.shape)
                 lab.append(resize(part_label,(patch_size,patch_size),anti_aliasing=True))
             lab = np.array(lab)
             

@@ -52,7 +52,9 @@ class mydataset_2d(Dataset):
         # skeleton_lee = skeletonize(blobs, method='lee')
         print(f"=====making dataset======")
         for i in tqdm(range(len(self.imageDir))):
-            img = skimage.io.imread(self.imageDir[i]).astype('float32') /65535.
+            img = skimage.io.imread(self.imageDir[i]).astype('float32')
+            img = (img - img.min()) / (img.max() - img.min())
+            
             lab = skimage.io.imread(self.labelDir[i])
                         
             lab = skimage.color.rgb2gray(lab)
@@ -66,14 +68,15 @@ class mydataset_2d(Dataset):
             lab[mask1],lab[mask2],lab[mask3] = 1,1,1 # cellbody # dendrite # axon
             lab[0] = np.where(np.sum(lab,axis=0)>0,np.zeros_like(lab[0]),np.ones_like(lab[0]))
 
-            if phase == 'train': 
-                for i in range(len(lab)): 
-                    if i == 1:
-                        lab[i] = dilation(lab[i], selem)
-                    elif i != 0: 
-                        lab[i] = skeletonize(lab[i], method='lee')/255
-                        lab[i] = dilation(lab[i], selem)
-            global_thresh += threshold_otsu(img)
+            # if phase == 'train': 
+            #     for i in range(len(lab)): 
+            #         if i == 1:
+            #             lab[i] = dilation(lab[i], selem)
+            #         elif i != 0: 
+            #             lab[i] = skeletonize(lab[i], method='lee')/255
+            #             lab[i] = dilation(lab[i], selem)
+
+            global_thresh += threshold_yen(img)
             #if 3d data imabe duplicate z axis
             if img.shape[1] > 1024:
                 center = img.shape[1]//2
@@ -85,9 +88,7 @@ class mydataset_2d(Dataset):
                 
                 lab = lab[:,center-512:center+512,center-512:center+512]
                 
-            
-            skimage.io.imsave('sample.tif',lab[...,np.newaxis].astype('uint8')*255.)
-            
+                
             if phase=='train':  
                 im_size = patch_size
                 ch_size = int(lab.shape[0])
@@ -95,12 +96,12 @@ class mydataset_2d(Dataset):
                 if '3d' in self.dataname:
                     img = img[4:-3]
                     lab = lab[4:-3]
-                    images.append(view_as_blocks(img ,block_shape=(8,im_size,im_size)))
-                    labels.append(view_as_blocks(lab ,block_shape=(8,im_size,im_size)))
+                    images.append(view_as_windows(img ,(8,im_size,im_size)))
+                    labels.append(view_as_windows(lab ,(8,im_size,im_size)))
                     
                 else:
-                    images.append(view_as_blocks(img ,block_shape=(im_size,im_size)))
-                    labels.append(view_as_blocks(lab ,block_shape=(ch_size,im_size,im_size)))
+                    images.append(view_as_windows(img ,(im_size,im_size),stride))
+                    labels.append(view_as_windows(lab ,(ch_size,im_size,im_size),stride))
                     
             else:
                 if '3d' in self.dataname:
@@ -113,8 +114,8 @@ class mydataset_2d(Dataset):
                     img = img[:24]
                     lab = lab[:24]
                         
-                    images.append(view_as_blocks(img ,block_shape=(24,256,256)))
-                    labels.append(view_as_blocks(lab ,block_shape=(24,256,256)))
+                    images.append(view_as_blocks(img ,(24,256,256)))
+                    labels.append(view_as_blocks(lab ,(24,256,256)))
 
                 else: 
                     # this is validation case 
@@ -122,7 +123,8 @@ class mydataset_2d(Dataset):
                     labels.append(lab)
         
         print(f"====start patch image=====")
-        print(global_thresh/len(self.imageDir))
+        self.mean_thresh = global_thresh/len(self.imageDir)
+        print(self.mean_thresh)
         self.imgs = np.array(images)
         print(self.imgs.shape)
         self.labels = np.array(labels)
@@ -130,6 +132,7 @@ class mydataset_2d(Dataset):
         print(self.imgs.shape)
         mean = self.imgs.mean() 
         std = self.imgs.std()
+        print(mean,std,'mean,std')
         if phase =='train':
             self.t_trans= custom_transforms.RandomGaussianBlur(90)
             self.t_trans2= custom_transforms.RandomHorizontalFlip(90)
@@ -250,8 +253,8 @@ class mydataset_2d(Dataset):
         add_label = []
         total_axon_pixel = 0
 
-        skimage.io.imsave('axontest.tif',np.swapaxes(labeldata[axon],1,3)[...,3:4].astype('uint8')*255.)
-        skimage.io.imsave('dedntest.tif',np.swapaxes(labeldata[axon],1,3)[...,2:3].astype('uint8')*255.)
+        # skimage.io.imsave('axontest.tif',np.swapaxes(labeldata[axon],1,3)[...,3:4].astype('uint8')*255.)
+        # skimage.io.imsave('dedntest.tif',np.swapaxes(labeldata[axon],1,3)[...,2:3].astype('uint8')*255.)
         print( axon)
 
         while need_pixel >= total_axon_pixel:
@@ -361,8 +364,7 @@ class mydataset_2d(Dataset):
 
                 label = np.array(label).astype('float32')
         image = image.astype(np.float64)
-        global_thresh = threshold_otsu(image)
-        _mask = np.where(image > global_thresh/len(self.imageDir),np.zeros_like(image),np.ones_like(image))[np.newaxis]
+        _mask = np.where(image > 0.25,np.zeros_like(image),np.ones_like(image))[np.newaxis]
         
         # print(_mask.max(),_mask.min(),_mask.shape)
         # self.L_transform(

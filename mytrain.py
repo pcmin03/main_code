@@ -48,10 +48,8 @@ def main(args):
 
     #select loss
     loss_list,lossname = select_loss(args)
-    print(lossname,'1111')
     # logger 
     main_path, valid_path = make_path(args)
-    print(main_path,valid_path,'1111')
     #set log
     logger = Logger(main_path,valid_path+lossname,delete=args.deleteall)
 

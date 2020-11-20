@@ -231,9 +231,6 @@ def detecion_box(img,predictions):
         img = cv2.rectangle(img, (x,y), (m,n), (255,255,0), 1)
     return img, boxes
 
-def get_lr(optimizer):
-    for param_group in optimizer.param_groups:
-        return param_group['lr']
 
 
 
