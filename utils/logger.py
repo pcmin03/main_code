@@ -44,6 +44,17 @@ class Logger(object):
             elif images_dict[img].ndim == 3:
                 self.writer.add_image(str(img),images_dict[img],step,dataformats='HWC')
 
+    def list_summary_scalars(self,scalar_list,step,phase='valid'):
+        ### list of scaler ###
+        Mavg_dict,IOU_scalar,precision_scalar,recall_scalr,F1score_scalar = scalar_list
+        
+        self.summary_scalars(IOU_scalar,step,'IOU',phase)
+        self.summary_scalars(precision_scalar,step,'precision',phase)
+        self.summary_scalars(recall_scalr,step,'recall',phase)
+        self.summary_scalars(F1score_scalar,step,'F1',phase)        
+        self.summary_scalars(Mavg_dict,step,'mean',phase)
+        
+
     def summary_scalars(self,scalar_dict,step,tag='loss',phase='valid'):
         ### list of scaler ###
         for i, scalar in enumerate(scalar_dict):

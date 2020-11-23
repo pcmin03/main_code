@@ -294,12 +294,12 @@ class mydataset_2d(Dataset):
         label = np.array(self.labels[index])
 
         if self.phase =='train':
-            if label.ndim == 3:
-                if 3 in np.unique(np.argmax(label,axis=0)) and np.sum(label[3]) > 200:
-                    sample = {'image':image,'label':label}    
-                    sample = self.t_trans3(self.t_trans2(sample))
-                    image = sample['image']
-                    label = sample['label']
+            # if label.ndim == 3:
+            if 3 in np.unique(np.argmax(label,axis=0)):
+                sample = {'image':image,'label':label}    
+                sample = self.t_trans3(self.t_trans2(sample))
+                image = sample['image']
+                label = sample['label']
 
         if self.dataname == 'scribble':
             mask0= label > 0.95

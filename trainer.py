@@ -17,8 +17,11 @@ import torch.autograd as autograd
 
 class Trainer():
     total_train_iter = 0
+    total_valid_iter = 0
+    
     best_epoch = 0 
     best_axon_recall = 0
+    
     
     def __init__(self,model, Mydataset,loss_list,logger,args,device):
         
@@ -50,8 +53,7 @@ class Trainer():
         for i, batch in enumerate(tqdm(self.Mydataset[phase])):
             
             self._input, self._label = Variable(batch[0]).to(self.device), Variable(batch[1]).to(self.device)
-            mask_ = Variable(batch[2]).to(self.device)         
-            print(self._input.shape)
+            mask_ = Variable(batch[2]).to(self.device)
             self.optimizer.zero_grad()
             torch.autograd.set_detect_anomaly(True)
 
@@ -70,26 +72,28 @@ class Trainer():
                     loss += recon_loss  
                     
                 # print(recon_loss,CE_loss)
+                self.evaluator.add_batch(torch.argmax(self._label,dim=1).cpu().numpy(),torch.argmax(self.predict,dim=1).cpu().numpy())
+                result_dicts = self.evaluator.update()
+                #update self.logger
+                self.t_loss.reset_dict()
+                total_score = self.t_loss.update_dict(result_dicts)
+
                 if phase == 'train':
                     loss.backward()
                     self.optimizer.step()
                     self.scheduler.step()
-                
-            self.evaluator.add_batch(torch.argmax(self._label,dim=1).cpu().numpy(),torch.argmax(self.predict,dim=1).cpu().numpy())
-            
-            result_dicts = self.evaluator.update()
-            #update self.logger
-            self.t_loss.reset_dict()
-            self.t_loss.update_dict(result_dicts)
 
-            self.logger.summary_scalars(self.t_loss.IOU_scalar,self.total_train_iter,'IOU',phase)
-            self.logger.summary_scalars(self.t_loss.precision_scalar,self.total_train_iter,'precision',phase)
-            self.logger.summary_scalars(self.t_loss.recall_scalr,self.total_train_iter,'recall',phase)
-            self.logger.summary_scalars(self.t_loss.F1score_scalar,self.total_train_iter,'F1',phase)
-            self.logger.summary_scalars({'loss':loss.detach().item()},self.total_train_iter,'Losses',phase)
-            self.logger.summary_scalars({'IR':self.get_lr(self.optimizer)},self.total_train_iter,tag='IR',phase=phase)
-            
-            self.total_train_iter += 1
+                    self.logger.list_summary_scalars(total_score,self.total_train_iter,phase)
+                    self.logger.summary_scalars({'loss':loss.detach().item()},self.total_train_iter,'Losses',phase)
+                    self.logger.summary_scalars({'IR':self.get_lr(self.optimizer)},self.total_train_iter,tag='IR',phase=phase)
+                    self.total_train_iter += 1
+                    
+                elif phase == 'valid': 
+                    
+                    self.logger.list_summary_scalars(total_score,self.total_valid_iter,phase)
+                    self.logger.summary_scalars({'loss':loss.detach().item()},self.total_valid_iter,'Losses',phase)
+                    self.logger.summary_scalars({'IR':self.get_lr(self.optimizer)},self.total_valid_iter,tag='IR',phase=phase)
+                    self.total_valid_iter += 1
         
         self.logger.print_value(result_dicts,phase)
         return result_dicts
@@ -151,7 +155,11 @@ class Trainer():
                 self.deployresult(epoch)
                 self.save_model(epoch)
 
-                
+    def test(self): 
+        print("start testing")
+        self.model.eval()
+        phase = 'test'
+        result_dict = self.train_one_epochs(epoch,phase)
                 # self.logger.summary_scalars({'IR':get_lr(optimizerG)},epoch,'IR',phase)
                 
     # def deploy3dresult(self):

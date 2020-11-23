@@ -27,7 +27,15 @@ class AverageMeter(object):
             self.precision_scalar.update({'precision_'+str(i):result_dicts['precision'][i]})
             self.recall_scalr.update({'recall_'+str(i):result_dicts['recall'][i]})
             self.F1score_scalar.update({'F1_'+str(i):result_dicts['F1'][i]})
-    
+
+        self.Mavg_dict = {'MIOU':np.nanmean(result_dicts['IOU']),
+                'Mprecision':np.nanmean(result_dicts['precision']),
+                'Mrecall':np.nanmean(result_dicts['recall']),
+                'MF1':np.nanmean(result_dicts['F1'])}
+
+        return [self.Mavg_dict,self.IOU_scalar,self.precision_scalar,self.recall_scalr,self.F1score_scalar]
+
+
     def update(self, val, n=1):
         self.val = val
         self.sum += val * n
