@@ -13,6 +13,24 @@ from natsort import natsorted
 from neuron_util import * 
 
 import segmentation_models_pytorch as smp
+class pretrain_unet(nn.Module):
+    
+    def __init__(self,in_channels=1,classes=4,active='sigmoid'):
+        super(pretrain_unet,self).__init__()
+        self.model = smp.Unet('resnet34',in_channels=1,classes=classes,activation=None,encoder_weights=None)
+        if active == 'softmax':
+            self.sigmoid = nn.Softmax(dim=1)
+        elif active == 'sigmoid':
+            self.sigmoid = nn.Sigmoid()
+        self.active = active
+    def forward(self,x):
+        x = self.model(x)
+        if self.active == 'sigmoid' or self.active == 'softmax':
+            result = self.sigmoid(x)
+        else: 
+            result = x
+
+        return result,x 
 
 class model():
     def __init__(self,model_path='./neuron_model/',nd2file='#16_2.nd2',gpu_id =0):
@@ -34,17 +52,17 @@ class model():
         self.patchimg,self.mitoimg = preprocessing(self.model_path+file_root+nd2file)
         self.save_dict = dict()
         
-    def pretrain_unet(self,in_channel,out_channel=4):    
-        return smp.Unet('resnet34',in_channels=in_channel,classes=out_channel,activation='softmax')
+    # def pretrain_unet(self,in_channel,out_channel=4):    
+    #     return smp.Unet('resnet34',in_channels=in_channel,classes=out_channel,activation='softmax')
 
     def segmentataion(self,post_proces=False):
         #load pretrained segmentataion model
         print('----- Segmentation model loding-------------')
-        segmentataion_model = self.pretrain_unet(1,4).to(self.cuda0)
+        segmentataion_model = pretrain_unet().to(self.cuda0)
 
         
-        checkpoint = torch.load(self.network_path+"lastsave_models{}.pth")
-        segmentataion_model.load_state_dict(checkpoint['gen_model'])
+        checkpoint = torch.load(self.network_path+"lastsave_models{}.pt")
+        segmentataion_model.load_state_dict(checkpoint['self.model_model'])
         segmentataion_model.eval()
 
         img = self.patchimg
@@ -52,21 +70,22 @@ class model():
         #change torch datatype
         origin_img = np.array(origin_img)
         
+        origin_img = (origin_img - imorigin_imgg.min()) / (origin_img.max() - origin_img.min())
         if img.dtype == 'uint16':
             self.L2_transform = transforms.Compose([
                     transforms.Lambda(lambda image: torch.from_numpy(np.array(image).astype(np.float32)).unsqueeze(0)),
                     transforms.Normalize([0.5], [0.5])])
         else :
-            self.L2_transform = transforms.Compose([
-                    transforms.Lambda(lambda image: torch.from_numpy(np.array(image).astype(np.float32)).unsqueeze(0)),
-                    transforms.Normalize([0], [255])])
+            self.L_transform =  transforms.Compose([
+                    transforms.ToTensor(),
+                    transforms.Normalize((mean),(std))])
         img = self.L2_transform(origin_img)
         
         #add batch axis
         img = img.cuda().unsqueeze(0)
         
         #evaluation
-        out = segmentataion_model(img)
+        out,_ = segmentataion_model(img)
         predict=out.float()
         sample = ch_channel(predict)
         skimage.io.imsave('./test.tif',sample[0])
@@ -130,7 +149,7 @@ class model():
 
 def main():
     # MFF overexpression/60X_2.nd2
-    seg_detec = model(model_path='./neuron_model/',nd2file='control/60x_4.nd2') #self,model_path='../neuron_model/',nd2file='#12_2.nd2'
+    seg_detec = model(model_path='./neuron_model/',nd2file='#12_2.nd2') #self,model_path='../neuron_model/',nd2file='#12_2.nd2'
     seg_detec.segmentataion(post_proces=True)
     boxes = seg_detec.detection(detection_network=False)
     seg_detec.save_image()

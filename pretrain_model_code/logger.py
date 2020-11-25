@@ -26,10 +26,10 @@ class Logger(object):
         
         self.writer = SummaryWriter(merge_path)
         
-    def summary_images(self,images_dict,step):
+    def summary_images(self,images_dict,step,phase):
         ### list of image ###
         for i, img in enumerate(images_dict):
-            self.writer.add_image(str(img),images_dict[img],step)
+            self.writer.add_image(str(img),str(phase)+'./'+images_dict[img],step)
 
     def summary_scalars(self,scalar_dict,step,tag='loss'):
         ### list of scaler ###

@@ -57,4 +57,4 @@ def select_loss(args):
         gabors = dont_train(Custom_Gabor_loss(device=device,weight=float(args.labmda2),use_median=use_median,use_label=use_label).to(device))
         lossdict.update({'gaborloss':gabors})
         
-    return lossdict, labelname +str(args.mask_trshold)
+    return lossdict, labelname +str(args.mask_trshold)+'noise_scaleton_'

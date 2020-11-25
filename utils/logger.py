@@ -33,16 +33,16 @@ class Logger(object):
         print(merge_path,self.log_dir )
         self.writer = SummaryWriter(merge_path)
         
-    def summary_images(self,images_dict,step):
+    def summary_images(self,images_dict,step,phase):
         ### list of image ###
         for i, img in enumerate(images_dict):
             if images_dict[img].dtype == 'uint16':
                 normalizedImg = (1024,1024)
                 images_dict[img] = cv2.normalize(images_dict[img],  normalizedImg, 0,255 , cv2.NORM_MINMAX).astype('uint8')
             if images_dict[img].ndim == 4: 
-                self.writer.add_images(str(img),images_dict[img],step,dataformats='NHWC')
+                self.writer.add_images(str(phase)+'/'+str(img),images_dict[img],step,dataformats='NHWC')
             elif images_dict[img].ndim == 3:
-                self.writer.add_image(str(img),images_dict[img],step,dataformats='HWC')
+                self.writer.add_image(str(phase)+'/'+str(img),images_dict[img],step,dataformats='HWC')
 
     def list_summary_scalars(self,scalar_list,step,phase='valid'):
         ### list of scaler ###

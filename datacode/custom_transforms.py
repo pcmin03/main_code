@@ -3,7 +3,8 @@ import random
 import numpy as np
 
 from PIL import Image, ImageOps, ImageFilter
-from scipy.ndimage import gaussian_filter
+from scipy.ndimage import gaussian_filter, rotate
+
 class Normalize(object):
     """Normalize a tensor image with mean and standard deviation.
     Args:
@@ -87,11 +88,19 @@ class RandomHorizontalFlip(object):
             #     im = img[::-1]
             #     mas = mask[::-1]
             # elif mask.ndim == 4 :
-            im = img[:,::-1]
-            mas = mask[:,::-1]
-        else:
-            im = img
-            mas = mask
+            # im = img[:,::-1]
+            # back = mask[0,::-1].copy()
+            # body = mask[1,::-1].copy()
+            # dend = mask[2,::-1].copy()
+            # axon = mask[3,::-1].copy()
+            
+            # mask = np.stack((back,body,dend,axon))
+            im = np.flip(img,axis=0)
+            mas = np.flip(mask,(0,1,2))
+
+        # else:
+        im = img
+        mas = mask
 
         return {'image': im,
                 'label': mas}
@@ -122,10 +131,8 @@ class RandomRotate(object):
     def __call__(self, sample):
         img = sample['image']
         mask = sample['label']
-        # rotate_degree = random.uniform(-1*self.degree, self.degree)
+        
         num = random.randint(0,4)
-        
-        
         # if mask.ndim == 2 :
         #     im = np.rot90(img,num).copy()
         #     mas = np.rot90(mask,num).copy()
@@ -134,10 +141,22 @@ class RandomRotate(object):
         #     mas = np.rot90(mask,num).copy()
         # elif mask.ndim == 4 :
             # 3d image and 4 channel
-        im = np.rot90(img,num,axes=(-2, -1)).copy() 
-        mas = np.rot90(mask,num,axes=(-2, -1)).copy()
-            
+        im = np.rot90(img,num,axes=(0,1))
+        mas = np.rot90(mask,num,axes=(1,2))
+        # back = np.rot90(mask[0].copy(),num,axes=(-2, -1))
+        # body = np.rot90(mask[1].copy(),num,axes=(-2, -1))
+        # dend = np.rot90(mask[2].copy(),num,axes=(-2, -1))
+        # axon = np.rot90(mask[3].copy(),num,axes=(-2, -1))
 
+        # back = mask[0,::-1].copy()
+        # body = mask[1,::-1].copy()
+        # dend = mask[2,::-1].copy()
+        # axon = mask[3,::-1].copy()
+        
+        # mask = np.stack((back,body,dend,axon))
+
+        im = img
+        mas = mask
         return {'image': im,
                 'label': mas}
 

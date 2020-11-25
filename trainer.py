@@ -49,7 +49,7 @@ class Trainer():
         print(f"==>{self.logger.log_dir}<==")
         self.t_loss.reset()
         self.recon_loss.reset()
-
+        
         for i, batch in enumerate(tqdm(self.Mydataset[phase])):
             
             self._input, self._label = Variable(batch[0]).to(self.device), Variable(batch[1]).to(self.device)
@@ -64,34 +64,38 @@ class Trainer():
 
                 loss = self.loss_list['mainloss'](self.predict,self._label,mask_)
                 
-                self.t_loss.update(loss.detach().item(),self._input.size(0))          
-
                 if self.args.RECON:
                     recon_loss,self.sum_output,self.back_output = self.loss_list['reconloss'](self.predict,mask_,self._label,self.args.activation)
                     self.recon_loss.update(recon_loss.detach().item(),self._input.size(0))
                     loss += recon_loss  
                     
+                self.t_loss.update(loss.detach().item(),self._input.size(0))          
+    
                 # print(recon_loss,CE_loss)
                 self.evaluator.add_batch(torch.argmax(self._label,dim=1).cpu().numpy(),torch.argmax(self.predict,dim=1).cpu().numpy())
                 result_dicts = self.evaluator.update()
                 #update self.logger
                 self.t_loss.reset_dict()
                 total_score = self.t_loss.update_dict(result_dicts)
-
+                
                 if phase == 'train':
                     loss.backward()
                     self.optimizer.step()
-                    self.scheduler.step()
-
+                    if self.scheduler.__class__.__name__ != 'ReduceLROnPlateau':
+                        self.scheduler.step()
+                    
                     self.logger.list_summary_scalars(total_score,self.total_train_iter,phase)
-                    self.logger.summary_scalars({'loss':loss.detach().item()},self.total_train_iter,'Losses',phase)
+                    self.logger.summary_scalars({'loss':self.t_loss.avg},self.total_train_iter,'Losses',phase)
                     self.logger.summary_scalars({'IR':self.get_lr(self.optimizer)},self.total_train_iter,tag='IR',phase=phase)
+                    self.logger.summary_scalars({'reconloss':self.recon_loss.avg},self.total_train_iter,'RLosses',phase)
+                    
                     self.total_train_iter += 1
                     
                 elif phase == 'valid': 
                     
                     self.logger.list_summary_scalars(total_score,self.total_valid_iter,phase)
-                    self.logger.summary_scalars({'loss':loss.detach().item()},self.total_valid_iter,'Losses',phase)
+                    self.logger.summary_scalars({'loss':self.t_loss.avg},self.total_valid_iter,'Losses',phase)
+                    self.logger.summary_scalars({'reconloss':self.recon_loss.avg},self.total_valid_iter,'RLosses',phase)
                     self.logger.summary_scalars({'IR':self.get_lr(self.optimizer)},self.total_valid_iter,tag='IR',phase=phase)
                     self.total_valid_iter += 1
         
@@ -102,7 +106,7 @@ class Trainer():
         for param_group in optimizer.param_groups:
             return param_group['lr']
 
-    def deployresult(self,epoch):
+    def deployresult(self,epoch,phase):
         print(f"label shape : {self._label.shape},featuer shape:,{self.prediction_map.shape},self.predict shape:{self.predict.shape}")
         
         save_stack_images = {'_label':self._label * 255. ,'_input':self._input * 65535,
@@ -119,8 +123,8 @@ class Trainer():
         save_stack_images['prediction_map'] = save_stack_images['prediction_map'].astype('uint16')
         save_stack_images.update({'prediction_result':pre_body.astype('uint8')})
         
-        self.logger.save_images(save_stack_images,epoch)
-        self.logger.summary_images(save_stack_images,epoch)
+        # self.logger.save_images(save_stack_images,epoch)
+        self.logger.summary_images(save_stack_images,epoch,phase)
         
     def save_model(self,epoch):
         if  self.evaluator.Class_F1score[3] > self.best_axon_recall :
@@ -139,6 +143,35 @@ class Trainer():
                 "epochs":epoch},
                 self.logger.log_dir+"lastsave_models{}.pt")
 
+    def testing(self,epoch,phase):
+        print(f"{epoch}/{self.epochs}epochs,IR=>{self.get_lr(self.optimizer)},best_epoch=>{self.best_epoch},phase=>{phase}")
+        print(f"==>{self.logger.log_dir}<==")
+        self.t_loss.reset()
+        self.recon_loss.reset()
+        
+        for i, batch in enumerate(tqdm(self.Mydataset[phase])):
+            
+            self._input, self._label = Variable(batch[0]).to(self.device), Variable(batch[1]).to(self.device)
+            mask_ = Variable(batch[2]).to(self.device)
+
+            with torch.no_grad():
+            ##### train with source code #####
+                self.predict,self.prediction_map=self.model(self._input)                    
+                self.t_loss.update(loss.detach().item(),self._input.size(0))          
+    
+                # print(recon_loss,CE_loss)
+                self.evaluator.add_batch(torch.argmax(self._label,dim=1).cpu().numpy(),torch.argmax(self.predict,dim=1).cpu().numpy())
+                result_dicts = self.evaluator.update()
+                #update self.logger
+                self.t_loss.reset_dict()
+                total_score = self.t_loss.update_dict(result_dicts)
+                
+                self.deployresult(i)
+                self.logger.list_summary_scalars(total_score,i,phase)
+
+        self.logger.print_value(result_dicts,phase)
+        return result_dicts
+    
     def train(self): 
 
         print("start trainning!!!!")
@@ -147,19 +180,20 @@ class Trainer():
             phase = 'train'
             self.model.train() 
             result_dict = self.train_one_epoch(epoch,phase)
-            
+            self.deployresult(epoch,phase)
+
             if epoch % self.args.changestep == 0:
                 phase = 'valid'
                 self.model.eval()            
                 result_dict = self.train_one_epoch(epoch,phase)
-                self.deployresult(epoch)
+                self.deployresult(epoch,phase)
                 self.save_model(epoch)
 
     def test(self): 
         print("start testing")
         self.model.eval()
         phase = 'test'
-        result_dict = self.train_one_epochs(epoch,phase)
+        result_dict = self.testing(epoch,phase)
                 # self.logger.summary_scalars({'IR':get_lr(optimizerG)},epoch,'IR',phase)
                 
     # def deploy3dresult(self):
