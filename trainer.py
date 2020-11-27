@@ -15,6 +15,8 @@ from utils.matrix import Evaluator, AverageMeter
 from utils.neuron_util import decode_segmap
 import torch.autograd as autograd
 
+from utils.pytorchtools import EarlyStopping
+
 class Trainer():
     total_train_iter = 0
     total_valid_iter = 0
@@ -44,12 +46,15 @@ class Trainer():
         self.t_loss = AverageMeter(args.out_class)
         self.recon_loss = AverageMeter(args.out_class)
 
+        self.early_stopping = EarlyStopping(patience = 50, verbose = True,save_path=self.logger.log_dir)
+
     def train_one_epoch(self,epoch,phase):
         print(f"{epoch}/{self.epochs}epochs,IR=>{self.get_lr(self.optimizer)},best_epoch=>{self.best_epoch},phase=>{phase}")
         print(f"==>{self.logger.log_dir}<==")
         self.t_loss.reset()
         self.recon_loss.reset()
-        
+        self.evaluator.reset()
+
         for i, batch in enumerate(tqdm(self.Mydataset[phase])):
             
             self._input, self._label = Variable(batch[0]).to(self.device), Variable(batch[1]).to(self.device)
@@ -98,6 +103,8 @@ class Trainer():
                     self.logger.summary_scalars({'reconloss':self.recon_loss.avg},self.total_valid_iter,'RLosses',phase)
                     self.logger.summary_scalars({'IR':self.get_lr(self.optimizer)},self.total_valid_iter,tag='IR',phase=phase)
                     self.total_valid_iter += 1
+                    self.logger.print_value(result_dicts,phase)
+                    self.early_stopping(self.t_loss.avg, self.model)
         
         self.logger.print_value(result_dicts,phase)
         return result_dicts
@@ -123,8 +130,9 @@ class Trainer():
         save_stack_images['prediction_map'] = save_stack_images['prediction_map'].astype('uint16')
         save_stack_images.update({'prediction_result':pre_body.astype('uint8')})
         
-        # self.logger.save_images(save_stack_images,epoch)
         self.logger.summary_images(save_stack_images,epoch,phase)
+        if phase == 'valid' or  phase== 'test':
+            self.logger.save_images(save_stack_images,epoch)
         
     def save_model(self,epoch):
         if  self.evaluator.Class_F1score[3] > self.best_axon_recall :
@@ -143,13 +151,14 @@ class Trainer():
                 "epochs":epoch},
                 self.logger.log_dir+"lastsave_models{}.pt")
 
-    def testing(self,epoch,phase):
-        print(f"{epoch}/{self.epochs}epochs,IR=>{self.get_lr(self.optimizer)},best_epoch=>{self.best_epoch},phase=>{phase}")
+    def testing(self,phase):
+        print(f"/{self.epochs}epochs,IR=>{self.get_lr(self.optimizer)},best_epoch=>{self.best_epoch},phase=>{phase}")
         print(f"==>{self.logger.log_dir}<==")
         self.t_loss.reset()
         self.recon_loss.reset()
-        
-        for i, batch in enumerate(tqdm(self.Mydataset[phase])):
+        self.evaluator.reset()
+
+        for i, batch in enumerate(tqdm(self.Mydataset['valid'])):
             
             self._input, self._label = Variable(batch[0]).to(self.device), Variable(batch[1]).to(self.device)
             mask_ = Variable(batch[2]).to(self.device)
@@ -157,7 +166,7 @@ class Trainer():
             with torch.no_grad():
             ##### train with source code #####
                 self.predict,self.prediction_map=self.model(self._input)                    
-                self.t_loss.update(loss.detach().item(),self._input.size(0))          
+                # self.t_loss.update(loss.detach().item(),self._input.size(0))          
     
                 # print(recon_loss,CE_loss)
                 self.evaluator.add_batch(torch.argmax(self._label,dim=1).cpu().numpy(),torch.argmax(self.predict,dim=1).cpu().numpy())
@@ -166,10 +175,10 @@ class Trainer():
                 self.t_loss.reset_dict()
                 total_score = self.t_loss.update_dict(result_dicts)
                 
-                self.deployresult(i)
+                self.deployresult(i,phase)
                 self.logger.list_summary_scalars(total_score,i,phase)
+                self.logger.print_value(result_dicts,phase)
 
-        self.logger.print_value(result_dicts,phase)
         return result_dicts
     
     def train(self): 
@@ -188,12 +197,15 @@ class Trainer():
                 result_dict = self.train_one_epoch(epoch,phase)
                 self.deployresult(epoch,phase)
                 self.save_model(epoch)
+            if self.early_stopping.early_stop:
+                print("Early stopping")
+                break
 
     def test(self): 
         print("start testing")
         self.model.eval()
         phase = 'test'
-        result_dict = self.testing(epoch,phase)
+        result_dict = self.testing(phase)
                 # self.logger.summary_scalars({'IR':get_lr(optimizerG)},epoch,'IR',phase)
                 
     # def deploy3dresult(self):

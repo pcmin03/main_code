@@ -27,8 +27,10 @@ class Logger(object):
             os.makedirs(merge_path)
 
         if delete == True:
-            print(f'remove_Dir:{merge_path,self.log_dir}')
-            shutil.rmtree(self.log_dir+'*',ignore_errors=True)  
+            print(f'======================remove_Dir:{merge_path,self.log_dir}======================')
+            print('======================remove_Dir:{merge_path,self.log_dir}======================')
+            
+            shutil.rmtree(self.log_dir,ignore_errors=True)  
             shutil.rmtree(merge_path,ignore_errors=True)
         print(merge_path,self.log_dir )
         self.writer = SummaryWriter(merge_path)

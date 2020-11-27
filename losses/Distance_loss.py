@@ -205,7 +205,7 @@ class Custom_RMSE_regularize(torch.nn.Module):
             back_output = dend_part
             # sum_output  = dend_part
             
-            MSE = torch.mean( DEMSE + AXMSE).float()
+            MSE = torch.mean(DEMSE + AXMSE).float()
             
 
             if self.select_MAE == 'MAE':

@@ -7,7 +7,7 @@ def my_config():
     parser.add_argument('--weight_decay',default=1e-8,help='set weight_decay',type=float)
     parser.add_argument('--weight',default=100,help='set Adaptive weight',type=float)
     parser.add_argument('--start_lr',default=3e-3, help='set of learning rate', type=float)
-    parser.add_argument('--end_lr',default=3e-9,help='set fo end learning rate',type=float)
+    parser.add_argument('--end_lr',default=3e-6,help='set fo end learning rate',type=float)
     parser.add_argument('--paralle',default=False,help='GPU paralle',type=bool)
     parser.add_argument('--scheduler',default='Cosine',help='select schduler method',type=str)
     parser.add_argument('--epochs',default=201,help='epochs',type=int)
@@ -32,7 +32,7 @@ def my_config():
     parser.add_argument('--oversample', default=True, action='store_false',help='oversample')
 
 
-    parser.add_argument('--use_train', default=False, action='store_true',help='make binary median image')
+    parser.add_argument('--use_train', default=True, action='store_false',help='make binary median image')
     parser.add_argument('--partial_recon', default=False, action='store_true',help='make binary median image')
     parser.add_argument('--class_weight', default=False, action='store_true',help='make binary median image')
 

@@ -152,15 +152,23 @@ def make_dataset(trainset,validset,args):
 
     else:  
         from .mydataset2d import mydataset_2d 
-
-        MyDataset = {'train': DataLoader(mydataset_2d(trainset[0],validset[0],args.patchsize,
-                        args.stride,args.oversample,args.datatype,phase='train'),
-                        args.batch_size, 
-                        shuffle = True,
-                        num_workers = num_workers),
-                    'valid' : DataLoader(mydataset_2d(trainset[1],validset[1],args.patchsize,
+        if args.use_train == False:
+            MyDataset = {'valid' : DataLoader(mydataset_2d(trainset[1],validset[1],args.patchsize,
                             args.stride,False,args.datatype,phase='valid'),
                             1, 
                             shuffle = False,
                             num_workers = num_workers)}
+        else:
+            MyDataset = {'train': DataLoader(mydataset_2d(trainset[0],validset[0],args.patchsize,
+                            args.stride,args.oversample,args.datatype,phase='train'),
+                            args.batch_size, 
+                            shuffle = True,
+                            num_workers = num_workers),
+                        'valid' : DataLoader(mydataset_2d(trainset[1],validset[1],args.patchsize,
+                            args.stride,False,args.datatype,phase='valid'),
+                            1, 
+                            shuffle = False,
+                            num_workers = num_workers)}
+
+
     return MyDataset

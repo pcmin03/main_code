@@ -54,15 +54,19 @@ def main(args):
     logger = Logger(main_path,valid_path+lossname,delete=args.deleteall)
 
     # continuous training
-    if os.path.exists(logger.log_dir+"lastsave_models{}.pth"):
-        checkpoint = torch.load(logger.log_dir +"lastsave_models{}.pth")
-        gen.load_state_dict(checkpoint['gen_model'])
+    
+    print('222222222222222222222',logger.log_dir)
+    if os.path.exists(logger.log_dir+"lastsave_models{}.pt"):
+        print('==================load model================== ')
+        checkpoint = torch.load(logger.log_dir +"lastsave_models{}.pt")
+        model.load_state_dict(checkpoint['self.model_model'])
 
     #import trainer
     Learner = Trainer(model, MyDataset,loss_list,logger,args,device)
     
-    Learner.train()
-    # Trainer.test()
+    if args.use_train == True: 
+        Learner.train()
+    Learner.test()
 
 
 if __name__ == '__main__': 

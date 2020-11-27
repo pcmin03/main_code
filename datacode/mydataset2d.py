@@ -50,7 +50,7 @@ class mydataset_2d(Dataset):
         labels_axon = []
         global_thresh = 0
         
-        self.selem = disk(1)
+        self.selem = disk(5)
         # skeleton_lee = skeletonize(blobs, method='lee')
         print(f"=====making dataset======")
         for i in tqdm(range(len(self.imageDir))):
@@ -82,25 +82,31 @@ class mydataset_2d(Dataset):
             # elif label.ndim == 3:
             lab[mask1],lab[mask2],lab[mask3] = 1,1,1 # cellbody # dendrite # axon
             lab[0] = np.where(np.sum(lab,axis=0)>0,np.zeros_like(lab[0]),np.ones_like(lab[0]))
-
-
             # print(lab[2].max(),lab[2].min())
 
             #add noise
-            if self.phase == 'train': 
-            #     # new_labels = []
-            #     # for la in lab: 
-            #     #     # if i == 1:
-            #     #     #     lab[i] = dilation(lab[i], self.selem)
-            #     #     # if i == 2 or i == 3:
-                     
-                # lab[1] = skeletonize(lab[2], method='lee')/255
-                lab[2] = skeletonize(lab[2], method='lee')/255
-                lab[3] = skeletonize(lab[3], method='lee')/255
-                print(lab[2].max(),lab[2].min())
+            # if self.phase == 'train': 
+            #     # lab[1] = skeletonize(lab[2], method='lee')/255
+            # lab[2] = skeletonize(lab[2], method='lee')/255
+            # lab[3] = skeletonize(lab[3], method='lee')/255
+        #     # skimage.io.imsave('')
             
-                # lab[2] = dilation(lab[2], self.selem)/255
-                # lab[3] = dilation(lab[3], self.selem)/255
+        #     lab[1] = dilation(lab[1], self.selem)
+            # lab[2] = dilation(lab[2], self.selem)
+            # lab[3] = dilation(lab[3], self.selem)
+
+            # print(lab[2].max(),lab[2].min())
+            skimage.io.imsave('labels'+str(i)+'.tif',(np.argmax(lab,axis=0)).astype('uint8'))        
+            
+            # sample = 1-(np.where(np.sum(lab,axis=0)>0,np.zeros_like(lab[0]),np.ones_like(lab[0])))
+            # lab[0] = 1-(img > 0.3)
+
+            # result_im = sample * lab[0]
+            # skimage.io.imsave('result_im'+str(i)+'.tif',(result_im*255.).astype('uint8'))        
+
+            # skimage.io.imsave('backs'+str(i)+'.tif',(np.argmax()lab*255.).astype('uint8'))        
+            # skimage.io.imsave('sample'+str(i)+'.tif',(sample*255.).astype('uint8'))        
+
 
             
             if phase=='train':  
@@ -176,6 +182,10 @@ class mydataset_2d(Dataset):
 
             print(np.unique(labels[0]))
             for i,vlaue in enumerate(self.labels):
+                # mask1= (lab > 0.85) & (lab < 0.94)
+                # mask2= (lab > 0.3) & (lab < 0.4)
+                # mask3= (lab > 0.4) & (lab < 0.84) 
+                # mask4= (lab < 0.2) 
                 # mask= (vlaue > 0.2) & (vlaue < 0.9)
                 # count_num = np.sum(vlaue[0])
                 # print(count_num)
@@ -252,6 +262,12 @@ class mydataset_2d(Dataset):
                     # self.labels[i] = dilation(self.labels[:,i], self.selem)
 
     def pre_oversampling(self,imgs,labeldata):
+        
+                # mask1= (lab > 0.85) & (lab < 0.94)
+                # mask2= (lab > 0.3) & (lab < 0.4)
+                # mask3= (lab > 0.4) & (lab < 0.84) 
+                # mask4= (lab < 0.2) 
+                # mask= (vlaue > 0.2) & (vlaue < 0.9)
         dend = []
         axon = []
         cross = []
@@ -275,14 +291,13 @@ class mydataset_2d(Dataset):
         axon  = np.array(axon)
         cross= np.array(cross)
         # print(dend,axon,cross)
-        _,multipixel_dend = np.unique(labeldata[cross,2],return_counts=True)
+        list_num ,multipixel_dend = np.unique(labeldata[cross,2],return_counts=True)
         _,multipixel_axon = np.unique(labeldata[cross,3],return_counts=True)
-        
         _,dend_pixel = np.unique(labeldata[dend,2],return_counts=True)
         _,axon_pixel = np.unique(labeldata[axon,3],return_counts=True)
 
         # need_pixel = (dend_pixel[1]+multipixel[1]) - (axon_pixel[1]+multipixel[2])
-        need_pixel = (dend_pixel[1]+multipixel_dend[1]) - (axon_pixel[1])
+        need_pixel = 20*(dend_pixel[1]+multipixel_dend[1]) - (axon_pixel[1])
         
         add_image = []
         add_label = []
@@ -295,11 +310,11 @@ class mydataset_2d(Dataset):
             total_axon_pixel += axon_pixels[1]
             add_label.append(add_axon)
             add_image.append(imgs[num_axon])
-
-        print(need_pixel, total_axon_pixel)
+            
         add_image = np.array(add_image)
         add_label = np.array(add_label)
 
+        print(add_image.shape, add_label.shape,'add_image.shape, add_label.shape')
         batch,zstack,channel,img_size,_= add_label.shape
         add_image = add_image.reshape(batch*zstack,img_size,img_size)
         add_label = add_label.reshape(batch*zstack,channel,img_size,img_size)
@@ -410,7 +425,7 @@ class mydataset_2d(Dataset):
 
     def __len__(self):
         self.number_img = len(self.imgs)
-        return self.number_img
+        return len(self.imgs)
     
     def __getitem__(self,index):
         
@@ -503,11 +518,10 @@ class mydataset_2d(Dataset):
         label = np.array(label).astype('float32')
         image = image.astype(np.float64)
         _mask = np.where(image > 0.25,np.zeros_like(image),np.ones_like(image))[np.newaxis]
-        
-        
+        clip = self.L_transform(image)
         # print(_mask.max(),_mask.min(),_mask.shape)
         # self.L_transform(
-        clip = self.L_transform(image)
+        
         # print(clip.max(),clip.min(),clip.shape)
         #make binary image
         # _mask = self.L_transform(image)
