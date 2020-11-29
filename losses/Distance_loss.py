@@ -35,10 +35,14 @@ class Custom_Adaptive_gausian_DistanceMap(torch.nn.Module):
         self.premask = premask
         self.MSE = nn.MSELoss()
 
-    def gaussian_fn(self,predict,label,labmda,channel): 
+    def gaussian_fn(self,predict,label,labmda,channel,select_MAE): 
 
         i = channel
-        gau_numer = torch.pow(torch.abs(predict[:,i:i+1]-label[:,i:i+1]),2)
+        # = torch.abs(predict[:,i:i+1]-label[:,i:i+1])
+        if select_MAE == 'SIGRMSE'or select_MAE == 'MSE':
+            gau_numer = torch.pow(torch.abs(predict[:,i:i+1]-label[:,i:i+1]),2)
+        elif select_MAE == 'SIGMAE' or select_MAE == 'MAE':
+            gau_numer = torch.abs(predict[:,i:i+1]-label[:,i:i+1])
         
         gau_deno = 1
         ch_gausian = torch.exp(-1*float(self.weight)*(gau_numer))
@@ -57,7 +61,6 @@ class Custom_Adaptive_gausian_DistanceMap(torch.nn.Module):
             body_gt = torch.where(gt==1,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
             dend_gt = torch.where(gt==2,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1) 
             axon_gt = torch.where(gt==3,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
-            
             back_output = net_output[:,0:1,:,:]
             new_gt = torch.cat((back_gt, body_gt,dend_gt,axon_gt),dim=1).cuda().float()
 
@@ -74,16 +77,14 @@ class Custom_Adaptive_gausian_DistanceMap(torch.nn.Module):
                     mask_img = torch.where(mask_inputs>self.treshold_value,one_img,zero_img)
                     back_gt = torch.where(mask_inputs>self.treshold_value,zero_img,one_img)
                     # print(new_gt.shape,'self.back-filter')
-                    new_gt[:,0:1] = mask_inputs
+                    # new_gt[:,0:1] = mask_inputs
 
-            back_one,back_zero = self.gaussian_fn(net_output,new_gt,1,0)
-            body_one,body_zero = self.gaussian_fn(net_output,new_gt,1,1)
-            dend_one,dend_zero = self.gaussian_fn(net_output,new_gt,1,2)
-            axon_one,axon_zero = self.gaussian_fn(net_output,new_gt,1,3)
+
+        back_one,back_zero = self.gaussian_fn(net_output,new_gt,1,0,self.select_MAE)
+        body_one,body_zero = self.gaussian_fn(net_output,new_gt,1,1,self.select_MAE)
+        dend_one,dend_zero = self.gaussian_fn(net_output,new_gt,1,2,self.select_MAE)
+        axon_one,axon_zero = self.gaussian_fn(net_output,new_gt,1,3,self.select_MAE)
         
-        MAE = torch.abs(net_output - new_gt) #L1 loss
-        MSE = torch.mul(MAE,MAE).float() 
-
         # BEMAE,BOMAE,DEMAE,AXMAE = MAE[:,0:1],MAE[:,1:2],MAE[:,2:3],MAE[:,3:4]
         # BEMSE,BOMSE,DEMSE,AXMSE = MSE[:,0:1],MSE[:,1:2],MSE[:,2:3],MSE[:,3:4]
 
@@ -91,32 +92,33 @@ class Custom_Adaptive_gausian_DistanceMap(torch.nn.Module):
         BOMAE = torch.abs(net_output[:,1:2] - new_gt[:,1:2])
         DEMAE = torch.abs(net_output[:,2:3] - new_gt[:,2:3])
         AXMAE = torch.abs(net_output[:,3:4] - new_gt[:,3:4])
-        
-        BEMSE = torch.mul(BEMAE,BEMAE).float()
-        BOMSE = torch.mul(BOMAE,BOMAE).float()
-        DEMSE = torch.mul(DEMAE,DEMAE).float()
-        AXMSE = torch.mul(AXMAE,AXMAE).float()
 
-        BEloss = (back_one + back_zero) * BEMSE
-        BOloss = (body_one + body_zero) * BOMSE
-        DEloss = (dend_one + dend_zero) * DEMSE
-        AXloss = (axon_one + axon_zero) * AXMSE
-
-        if self.select_MAE == 'MAE':
+        if self.select_MAE == 'MAE' or self.select_MAE == 'MSE':
+            MAE = torch.abs(net_output - new_gt) #L1 loss
+            MSE = torch.mul(MAE,MAE).float() 
             return torch.mean(MAE).float()
-        elif self.select_MAE == 'MSE': 
-            return torch.mean(MSE).float()
 
-        elif self.select_MAE == 'RMSE' or self.select_MAE == 'SIGRMSE' or self.select_MAE == 'SIGMAE':
+        elif self.select_MAE == 'SIGRMSE':
+            
+            BEMSE = torch.mul(BEMAE,BEMAE).float()
+            BOMSE = torch.mul(BOMAE,BOMAE).float()
+            DEMSE = torch.mul(DEMAE,DEMAE).float()
+            AXMSE = torch.mul(AXMAE,AXMAE).float()
 
-            if self.select_MAE == 'SIGRMSE':
-                return torch.mean(BEMSE+BOMSE+DEloss+AXloss).float()
-            elif self.select_MAE == 'SIGMAE':
-                BEloss = (back_one + back_zero) * BEMAE
-                BOloss = (body_one + body_zero) * BOMAE
-                DEloss = (dend_one + dend_zero) * DEMAE
-                AXloss = (axon_one + axon_zero) * AXMAE
-                return torch.mean(BEMAE+BOMAE+DEloss+AXloss).float()
+            BEloss = (back_one + back_zero) * BEMSE
+            BOloss = (body_one + body_zero) * BOMSE
+            DEloss = (dend_one + dend_zero) * DEMSE
+            AXloss = (axon_one + axon_zero) * AXMSE
+
+            return torch.mean(BEMSE+BOMSE+DEloss+AXloss).float()
+        
+        elif self.select_MAE == 'SIGMAE':
+            
+            BEloss = (back_one + back_zero) * BEMAE
+            BOloss = (body_one + body_zero) * BOMAE
+            DEloss = (dend_one + dend_zero) * DEMAE
+            AXloss = (axon_one + axon_zero) * AXMAE
+            return torch.mean(BEMAE+BOMAE+DEloss+AXloss).float()
         
 ######################################################################
 
@@ -191,26 +193,27 @@ class Custom_RMSE_regularize(torch.nn.Module):
             if self.clamp == True:
                 dend_part = F.sigmoid(dend_part)
                 axon_part = F.sigmoid(axon_part)
-                
+            sum_output = axon_part
+            back_output = dend_part
+            
             BOMAE = torch.abs(body_part - feature_output[:,1:2])
             DEMAE = torch.abs(dend_part - feature_output[:,2:3])
             AXMAE = torch.abs(axon_part - feature_output[:,3:4])
 
             MAE = DEMAE + AXMAE
-            BOMSE = torch.mul(BOMAE,BOMAE)
-            DEMSE = torch.mul(DEMAE,DEMAE)
-            AXMSE = torch.mul(AXMAE,AXMAE)
-
-            sum_output = axon_part
-            back_output = dend_part
-            # sum_output  = dend_part
             
-            MSE = torch.mean(DEMSE + AXMSE).float()
-            
-
             if self.select_MAE == 'MAE':
                 return [torch.mean(MAE).float() * float(self.weight),sum_output,back_output]
             elif self.select_MAE == 'RMSE':
+            
+                BOMSE = torch.mul(BOMAE,BOMAE)
+                DEMSE = torch.mul(DEMAE,DEMAE)
+                AXMSE = torch.mul(AXMAE,AXMAE)
+
+                # sum_output  = dend_part
+                
+                MSE = torch.mean(DEMSE + AXMSE).float()
+            
                 return [MSE.float() * float(self.weight),sum_output,back_output]
         else : 
             sum_output = self.make_mRMSE(feature_output)

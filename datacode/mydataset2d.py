@@ -22,11 +22,7 @@ from skimage.morphology import erosion, dilation, opening, closing,disk
 from sklearn.preprocessing import MultiLabelBinarizer, OneHotEncoder
 
 import datacode.custom_transforms as custom_transforms
-
-
 import albumentations as A
-# import imgaug.augmenters as iaa
-# aug = iaa.CoarseDropout((0.0, 0.05), size_percent=(0.02, 0.25))
 
 # import cupy as cp
 class mydataset_2d(Dataset):
@@ -82,21 +78,19 @@ class mydataset_2d(Dataset):
             # elif label.ndim == 3:
             lab[mask1],lab[mask2],lab[mask3] = 1,1,1 # cellbody # dendrite # axon
             lab[0] = np.where(np.sum(lab,axis=0)>0,np.zeros_like(lab[0]),np.ones_like(lab[0]))
-            # print(lab[2].max(),lab[2].min())
-
+            
+            skimage.io.imsave('sample.tif',(1-img))
             #add noise
             # if self.phase == 'train': 
             #     # lab[1] = skeletonize(lab[2], method='lee')/255
             # lab[2] = skeletonize(lab[2], method='lee')/255
             # lab[3] = skeletonize(lab[3], method='lee')/255
-        #     # skimage.io.imsave('')
-            
-        #     lab[1] = dilation(lab[1], self.selem)
+            # lab[1] = dilation(lab[1], self.selem)
             # lab[2] = dilation(lab[2], self.selem)
             # lab[3] = dilation(lab[3], self.selem)
 
             # print(lab[2].max(),lab[2].min())
-            skimage.io.imsave('labels'+str(i)+'.tif',(np.argmax(lab,axis=0)).astype('uint8'))        
+            # skimage.io.imsave('labels'+str(i)+'.tif',(np.argmax(lab,axis=0)).astype('uint8'))        
             
             # sample = 1-(np.where(np.sum(lab,axis=0)>0,np.zeros_like(lab[0]),np.ones_like(lab[0])))
             # lab[0] = 1-(img > 0.3)
@@ -106,9 +100,6 @@ class mydataset_2d(Dataset):
 
             # skimage.io.imsave('backs'+str(i)+'.tif',(np.argmax()lab*255.).astype('uint8'))        
             # skimage.io.imsave('sample'+str(i)+'.tif',(sample*255.).astype('uint8'))        
-
-
-            
             if phase=='train':  
                 im_size = patch_size
                 ch_size = int(lab.shape[0])
@@ -182,16 +173,8 @@ class mydataset_2d(Dataset):
 
             print(np.unique(labels[0]))
             for i,vlaue in enumerate(self.labels):
-                # mask1= (lab > 0.85) & (lab < 0.94)
-                # mask2= (lab > 0.3) & (lab < 0.4)
-                # mask3= (lab > 0.4) & (lab < 0.84) 
-                # mask4= (lab < 0.2) 
-                # mask= (vlaue > 0.2) & (vlaue < 0.9)
-                # count_num = np.sum(vlaue[0])
-                # print(count_num)
                 count_num = np.sum(1-vlaue[0])
-                # print(count_num)
-                if count_num >= ((patch*patch)*0.05):
+                if count_num >= ((patch*patch)*0.02):
                     new_label.append(vlaue)
                     new_image.append(self.imgs[i])
             print(len(new_label),'lenght...',len(self.labels))
@@ -234,10 +217,6 @@ class mydataset_2d(Dataset):
             self.imgs,self.labels = self.pre_oversampling(self.imgs,self.labels)
             print(f"imglen: {len(self.imgs)},imgshape:{self.imgs.shape}")
             print(f"lablen:{len(self.labels)},labshape:{self.labels.shape}")
-
-
-            # skimage.io.imsave('labels.tif',(self.labels[-30:,...,np.newaxis]*255.).astype('uint8'))        
-
         # if self.phase == 'train': 
         #     # new_labels = []
         #     for lab in self.labels: 
@@ -295,32 +274,41 @@ class mydataset_2d(Dataset):
         _,multipixel_axon = np.unique(labeldata[cross,3],return_counts=True)
         _,dend_pixel = np.unique(labeldata[dend,2],return_counts=True)
         _,axon_pixel = np.unique(labeldata[axon,3],return_counts=True)
-
-        # need_pixel = (dend_pixel[1]+multipixel[1]) - (axon_pixel[1]+multipixel[2])
-        need_pixel = 20*(dend_pixel[1]+multipixel_dend[1]) - (axon_pixel[1])
+        print(f"Number of pixels : {multipixel_dend,multipixel_axon,dend_pixel,axon_pixel}")
         
+        # need_pixel = (dend_pixel[1]+multipixel[1]) - (axon_pixel[1]+multipixel[2])
+        need_pixel = (dend_pixel[1]+multipixel_dend[1]) - (axon_pixel[1])
+        # array([24155046,  1895514]), array([25445870,   604690]), array([72022142,  8046466]), array([37679278,  1118034]))
+        # array([22429676,  1884180]), array([23718967,   594889]), array([59199930,  7925318]), array([24626712,   981480]), array([46148643,  1884180,   594889]))
+        # 8828018 8834063
+        # 98304000, 98301766
         add_image = []
         add_label = []
         total_axon_pixel = 0
-
         while need_pixel >= total_axon_pixel:
             num_axon = np.random.choice(axon,10)
-            add_axon = labeldata[num_axon]
+            add_axon = labeldata[num_axon,3:4]
             _,axon_pixels = np.unique(add_axon,return_counts=True)
             total_axon_pixel += axon_pixels[1]
             add_label.append(add_axon)
             add_image.append(imgs[num_axon])
-            
+        
+
         add_image = np.array(add_image)
         add_label = np.array(add_label)
+        zeros_label = np.zeros_like(add_label)
+        add_label = np.concatenate((zeros_label,zeros_label,zeros_label,add_label),axis=2)
+        print(add_image.shape,add_label.shape)
+        # (14130, 128, 128) (14130, 4, 128, 128)
 
-        print(add_image.shape, add_label.shape,'add_image.shape, add_label.shape')
         batch,zstack,channel,img_size,_= add_label.shape
         add_image = add_image.reshape(batch*zstack,img_size,img_size)
         add_label = add_label.reshape(batch*zstack,channel,img_size,img_size)
 
         imgs = np.concatenate((add_image,imgs),axis=0)
         labels = np.concatenate((add_label,labeldata),axis=0)
+        print(add_image.shape, add_label.shape,'add_image.shape, add_label.shape')
+        print(total_axon_pixel,need_pixel)
         skimage.io.imsave('imgs.tif',(imgs[0:30,...,np.newaxis]*65535.).astype('uint16'))
         skimage.io.imsave('labels.tif',(labels[0:30,...,np.newaxis]*255.).astype('uint8'))
         
@@ -518,6 +506,7 @@ class mydataset_2d(Dataset):
         label = np.array(label).astype('float32')
         image = image.astype(np.float64)
         _mask = np.where(image > 0.25,np.zeros_like(image),np.ones_like(image))[np.newaxis]
+        label[0] = _mask
         clip = self.L_transform(image)
         # print(_mask.max(),_mask.min(),_mask.shape)
         # self.L_transform(

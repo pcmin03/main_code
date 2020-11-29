@@ -104,7 +104,6 @@ class Trainer():
                     self.logger.summary_scalars({'IR':self.get_lr(self.optimizer)},self.total_valid_iter,tag='IR',phase=phase)
                     self.total_valid_iter += 1
                     self.logger.print_value(result_dicts,phase)
-                    self.early_stopping(self.t_loss.avg, self.model)
         
         self.logger.print_value(result_dicts,phase)
         return result_dicts
@@ -193,10 +192,12 @@ class Trainer():
 
             if epoch % self.args.changestep == 0:
                 phase = 'valid'
+                self.evaluator.reset()
                 self.model.eval()            
                 result_dict = self.train_one_epoch(epoch,phase)
                 self.deployresult(epoch,phase)
                 self.save_model(epoch)
+                self.early_stopping(self.t_loss.avg, self.model)
             if self.early_stopping.early_stop:
                 print("Early stopping")
                 break

@@ -20,45 +20,6 @@ def resetseed(random_seed):
     random.seed(random_seed)
     torch.cuda.manual_seed(random_seed)
 #  kfold data
-def divide_kfold(Datadir,args):
-
-    imageDir,labelDir,testDir,tlabelDir = Datadir
-    images = np.array(natsorted(glob(imageDir+'*')))
-    labels = np.array(natsorted(glob(labelDir+'*')))
-    train,valid = dict(),dict()
-    
-    if args.cross_validation == True:
-        # total_label = []
-        # for label in labels: 
-        #     total_label.append(np.array(natsorted(glob(label+'/*'))))
-        # labels = np.array(total_label)
-        kfold = KFold(n_splits=args.Kfold)
-        i = 0
-        
-        # print(f"train_index{train_index} \t test_index:{test_index}")
-        for train_index, test_index in kfold.split(images):
-            img_train,img_test = images[train_index], images[test_index]
-            lab_train,lab_test = labels[train_index], labels[test_index]
-            i+=1
-            
-            train.update([('train'+str(i),img_train),('test'+str(i),img_test)])
-            valid.update([('train'+str(i),lab_train),('test'+str(i),lab_test)])
-        
-        train_num, test_num = 'train'+str(args.knum), 'test'+str(args.knum)
-        #train set
-        image_train = train[train_num]
-        label_train = valid[train_num]
-        #valid set
-        image_valid = train[test_num]
-        label_valid = valid[test_num]
-        
-    else: 
-        image_train = images
-        label_train = labels
-        image_valid = np.array(natsorted(glob(testDir+'*')))
-        label_valid = np.array(natsorted(glob(tlabelDir+'*')))
-    # print([image_train,image_valid],[label_train,label_valid])
-    return [image_train,image_valid],[label_train,label_valid]
 
 def select_data(args):
 
@@ -121,6 +82,46 @@ def select_data(args):
     
     return [imageDir,labelDir,testDir,tlabelDir]
 
+def divide_kfold(Datadir,args):
+
+    imageDir,labelDir,testDir,tlabelDir = Datadir
+    images = np.array(natsorted(glob(imageDir+'*')))
+    labels = np.array(natsorted(glob(labelDir+'*')))
+    train,valid = dict(),dict()
+    
+    if args.cross_validation == True:
+        total_label = []
+        for label in labels: 
+            total_label.append(np.array(natsorted(glob(label+'/*'))))
+        labels = np.array(total_label)
+        
+        kfold = KFold(n_splits=args.Kfold)
+        i = 0
+        
+        # print(f"train_index{train_index} \t test_index:{test_index}")
+        for train_index, test_index in kfold.split(images):
+            img_train,img_test = images[train_index], images[test_index]
+            lab_train,lab_test = labels[train_index], labels[test_index]
+            i+=1
+            
+            train.update([('train'+str(i),img_train),('test'+str(i),img_test)])
+            valid.update([('train'+str(i),lab_train),('test'+str(i),lab_test)])
+        
+        train_num, test_num = 'train'+str(args.knum), 'test'+str(args.knum)
+        #train set
+        image_train = train[train_num]
+        label_train = valid[train_num]
+        #valid set
+        image_valid = train[test_num]
+        label_valid = valid[test_num]
+        
+    else: 
+        image_train = images
+        label_train = labels
+        image_valid = np.array(natsorted(glob(testDir+'*')))
+        label_valid = np.array(natsorted(glob(tlabelDir+'*')))
+    return [image_train,image_valid],[label_train,label_valid]
+
 def make_dataset(trainset,validset,args): 
     num_workers = 16
     if 'xray' in args.datatype:
@@ -136,10 +137,10 @@ def make_dataset(trainset,validset,args):
                             1, 
                             shuffle = False,
                             num_workers = num_workers)}
+
     elif '3d' in args.datatype: 
         from .mydataset3d import mydataset_3d 
-        print(args.datatype,'00000000000000000000000')
-        MyDataset = {'train': DataLoader(mydataset_3d(trainset[0],validset[0],args.patchsize,
+        MyDataset = {'train': DataLoader(mydataset_3d(trainset[1],validset[1],args.patchsize,
                             args.stride,args.oversample,args.datatype,phase='train'),
                             10, 
                             shuffle = True,

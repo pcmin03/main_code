@@ -55,11 +55,11 @@ def main(args):
 
     # continuous training
     
-    print('222222222222222222222',logger.log_dir)
-    if os.path.exists(logger.log_dir+"lastsave_models{}.pt"):
-        print('==================load model================== ')
-        checkpoint = torch.load(logger.log_dir +"lastsave_models{}.pt")
-        model.load_state_dict(checkpoint['self.model_model'])
+    # print('222222222222222222222',logger.log_dir)
+    # if os.path.exists(logger.log_dir+"lastsave_models{}.pt"):
+    #     print('==================load model================== ')
+    #     checkpoint = torch.load(logger.log_dir +"lastsave_models{}.pt")
+    #     model.load_state_dict(checkpoint['self.model_model'])
 
     #import trainer
     Learner = Trainer(model, MyDataset,loss_list,logger,args,device)

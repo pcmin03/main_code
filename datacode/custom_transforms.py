@@ -83,18 +83,6 @@ class RandomHorizontalFlip(object):
         mask = sample['label']
         
         if random.random() < 0.5:
-            
-            # if mask.ndim == 2:
-            #     im = img[::-1]
-            #     mas = mask[::-1]
-            # elif mask.ndim == 4 :
-            # im = img[:,::-1]
-            # back = mask[0,::-1].copy()
-            # body = mask[1,::-1].copy()
-            # dend = mask[2,::-1].copy()
-            # axon = mask[3,::-1].copy()
-            
-            # mask = np.stack((back,body,dend,axon))
             im = np.flip(img,axis=0)
             mas = np.flip(mask,(0,1,2))
 
