@@ -1,11 +1,7 @@
 import torch
-from torch import nn
-
-import segmentation_models_pytorch as smp
-from torch.autograd import Variable
-
 from .my_network import *  
 from .my_network3d import ResidualUNet3D
+
 def dont_train(net):
     '''
     set training parameters to false.
@@ -14,6 +10,7 @@ def dont_train(net):
         param.requires_grad = False
     return net
     
+#weight initilize
 def weights_init(m):
     if isinstance(m, nn.Conv2d):
         # xavier(m.weight.data)
@@ -24,6 +21,7 @@ def weights_init(m):
         if m.bias is not None:
             m.bias.data.zero_()
 
+#load training model
 def init_model(args,device):
 
     if args.modelname =='unet':

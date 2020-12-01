@@ -4,10 +4,9 @@ from .information_loss import *
 from .Garborloss import *
 
 def select_loss(args): 
-
     lossdict = dict()
     labelname = ""
-    #suggest loss
+    #my loss
     if args.RECONGAU == True:
         criterion = Custom_Adaptive_gausian_DistanceMap(float(args.weight),distanace_map=args.class_weight,select_MAE=args.Aloss,
                                                         treshold_value=args.mask_trshold,back_filter=args.back_filter,premask=args.premask)
@@ -37,6 +36,7 @@ def select_loss(args):
         labelname += 'seg_adaptiveCE_'    
     lossdict.update({'mainloss':criterion})
     
+    #second loss
     if args.RECON == True:
         reconstruction_loss = Custom_RMSE_regularize(float(args.labmda),treshold_value=args.mask_trshold,select_MAE=args.Rloss,
                                                     partial = args.partial_recon,premask=args.premask,clamp=args.clamp)
@@ -46,7 +46,8 @@ def select_loss(args):
             labelname += 'part_reconloss2_'+str(args.Rloss)+'_' + str(args.labmda)+'_'
         else : 
             labelname += 'reconloss_'+str(args.Rloss)+'_' + str(args.labmda)+'_'
-        
+
+    #new loss        
     if args.TVLOSS == True:
         tv_loss = TVLoss(TVLoss_weight=0.001)
         labelname += 'TVLoss_'+str(0.001)+'_'

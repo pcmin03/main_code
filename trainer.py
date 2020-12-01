@@ -83,12 +83,11 @@ class Trainer():
                 self.t_loss.reset_dict()
                 total_score = self.t_loss.update_dict(result_dicts)
                 
+                if self.scheduler.__class__.__name__ != 'ReduceLROnPlateau':
+                    self.scheduler.step()
                 if phase == 'train':
                     loss.backward()
                     self.optimizer.step()
-                    if self.scheduler.__class__.__name__ != 'ReduceLROnPlateau':
-                        self.scheduler.step()
-                    
                     self.logger.list_summary_scalars(total_score,self.total_train_iter,phase)
                     self.logger.summary_scalars({'loss':self.t_loss.avg},self.total_train_iter,'Losses',phase)
                     self.logger.summary_scalars({'IR':self.get_lr(self.optimizer)},self.total_train_iter,tag='IR',phase=phase)
@@ -197,7 +196,7 @@ class Trainer():
                 result_dict = self.train_one_epoch(epoch,phase)
                 self.deployresult(epoch,phase)
                 self.save_model(epoch)
-                self.early_stopping(self.t_loss.avg, self.model)
+                self.early_stopping(self.t_loss.IOU_scalar['IOU_1'], self.model)
             if self.early_stopping.early_stop:
                 print("Early stopping")
                 break

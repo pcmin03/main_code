@@ -57,8 +57,6 @@ class Custom_CE(torch.nn.Module):
         if active == 'softmax':
             target = target.unsqueeze(1)
             loss = predict.gather(1, target)
-            # print(predict.shape,target.shape,predict.max(),target.max(),predict.min(),target.min())
-            # with torch.no_grad():
             back = torch.where(target==0,torch.ones_like(target),torch.zeros_like(target)).float()
             no_back = torch.where(target==0,torch.zeros_like(target),torch.ones_like(target)).float()
         elif active == 'sigmoid':
@@ -81,8 +79,6 @@ class Custom_CE(torch.nn.Module):
         batch_size = predict.size()[0]
 
         weighted_logs  = (loss*adptive_weight).view(batch_size,-1)
-        # print(weighted_logs.shape,adptive_weight.shape,predict.shape,loss.shape,target.shape)
-        # print(adptive_weight.mean(),back.shape)
 
         i0 = 1
         i1 = 2
@@ -94,25 +90,15 @@ class Custom_CE(torch.nn.Module):
 
         weighted_loss = weighted_logs.sum(1) / adptive_weight.view(batch_size,-1).sum(1)
 
-        # predict = predict.contiguous()
-        # predict = predict.view(-1, num_classes) #shape=(vox_num, class_num)
-        # gt = gt.view(-1,)
         return -1 * weighted_loss.mean()
 
     def forward(self, net_output, gt,upsample=False):
     
         if upsample == True:
             gt = F.interpolate(gt.unsqueeze(1), net_output.size()[2:],mode='bilinear',align_corners =True).long()
-            # gt = resize(gt,net_output.size()[2:])
-            # print(gt.shape)
             new_gt = gt
         
         gt = gt.long()
-        # if self.active = 'softmax':
-        #     net_output = F.log_softmax(net_output,dim=1)
-        # elif self.active = 'sigmoid':
-        #     net_output = net_output
-        # BCEloss = F.cross_entropy(net_output ,gt)
         
         if upsample == True:        
             return  [self.Adaptive_NLLloss(net_output,gt,self.weight,Gaussianfn = self.Gaussian),new_gt]
@@ -166,16 +152,12 @@ class noiseCE(nn.Module):
         
         if self.BCE == True:    
             # cross entropy
-            # log_output = self.softmax(net_output)
             total_ce = 0
-            # print(gt.shape, net_output.shape)
-            
             num_classes = net_output.size()[1]
             net_output = net_output.contiguous()
             net_output = net_output.view(-1, num_classes)
 
             gt = gt.view(-1,num_classes)
-            # print(gt.shape, net_output.shape)
             for i in [0,1,2,3]:     
                 total_ce += self.BCEloss(net_output[:,i].float(),gt[:,i])
             
@@ -183,32 +165,21 @@ class noiseCE(nn.Module):
 
         elif self.NCE == True: 
             # reverse cross entropy
-            # log_output = self.softmax(net_output)
             MAE = torch.abs(gt-self.softmax(net_output)) 
             
             gt = gt.long()
             total_ce = 0
-            
-            # print(gt.shape)
             for i in [0,1,2,3]:
                 each_gt = gt[:,i]
                 total_ce += self.loss(net_output,each_gt)
 
             gt = torch.argmax(gt,dim=1)         
             ce = self.cross_entropy(net_output, gt)   
-
-
-            # ce = self.loss(log_output, gt)
             
             nce = ce/total_ce
             
             return rce + nce
-            # return nce*float(0.1) + rce*float(1) 
-        # elif self.SCE == True: 
-        #     log_output = self.softmax(net_output)
 
-            # return 
-        
 
 ######################################################################
 
@@ -423,67 +394,3 @@ class gabor_test(torch.nn.Module):
     def forward(self, net_output):
         out_feature = self.gabor(net_output)
         return out_feature
-
-######################################################################
-
-#--------------------------NCdice loss-------------------------------#
-
-######################################################################
-
-class NCDICEloss(torch.nn.Module):
-    
-    def __init__(self,r=1.5):
-        super(NCDICEloss,self).__init__()
-        self.r = r
-        self.treshold_value = 0.3
-    # def dice
-    # def dice_coef(self,y_true, y_pred):
-    #     y_true_f = y_true.contiguous().view(y_true.shape[0], -1)
-    #     y_pred_f = y_pred.contiguous().view(y_pred.shape[0], -1)
-    #     intersection = torch.sum(torch.pow(torch.abs(y_true_f - y_pred_f),self.r),dim=1)
-    #     # print(y_pred_f.shape,y_true_f.shape)
-    #     return intersection/(torch.sum(y_true_f.pow(2),dim=1) + torch.sum(y_pred_f.pow(2),dim=1) + 1e-5)
-
-    def forward(self, feature_output,labels,mask_inputs):
-        zero_img = torch.zeros_like(mask_inputs)
-        one_img = torch.ones_like(mask_inputs)
-        mask_img = torch.where(mask_inputs>self.treshold_value,one_img,zero_img)
-        back_gt = torch.where(mask_inputs>self.treshold_value,zero_img,one_img)
-
-        labels[:,0:1] = back_gt
-
-        dice = BinaryDiceLoss()
-        total_loss= 0
-        for i in [0,1,2,3]:
-            # if i != self.ignore_index:
-            dice_loss = dice( feature_output[:, i],labels[:, i])
-            total_loss += dice_loss
-        # print(result)
-        return total_loss/labels.shape[1]
-
-class BinaryDiceLoss(nn.Module):
-    def __init__(self, smooth=1e-5, p=1.5, reduction='mean'):
-        super(BinaryDiceLoss, self).__init__()
-        self.smooth = smooth
-        self.p = p
-        self.reduction = reduction
-
-    def forward(self, predict, target):
-        assert predict.shape[0] == target.shape[0], "predict & target batch size don't match"
-        predict = predict.contiguous().view(predict.shape[0], -1)
-        target = target.contiguous().view(target.shape[0], -1)
-
-        num = torch.sum(torch.pow(torch.abs(predict - target),1.5), dim=1)
-        den = torch.sum(predict.pow(self.p), dim=1) + torch.sum(target.pow(self.p), dim=1) + self.smooth
-
-        loss = num / den
-
-        if self.reduction == 'mean':
-            return loss.mean()
-        elif self.reduction == 'sum':
-            return loss.sum()
-        elif self.reduction == 'none':
-            return loss
-        else:
-            raise Exception('Unexpected reduction {}'.format(self.reduction))
-

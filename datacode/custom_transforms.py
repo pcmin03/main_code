@@ -96,20 +96,14 @@ class RandomHorizontalFlip(object):
 class Normalize_3d:
 
     def __init__(self, mean, std, **kwargs):
-        # assert max_value > min_value
-        # self.min_value = min_value
-        # self.value_range = max_value - min_value
+        assert max_value > min_value
+        
         self.mean = mean 
         self.std = std
     def __call__(self, m):
-        # m /= float(self.max_value)
-        # m -= torch.mean(m)
-        # m /= torch.std(m)
-
+        
         m -= self.mean
         m /= self.std
-
-        # norm_0_1 = (m - self.min_value) / self.value_range
         return m
 
 class RandomRotate(object):
@@ -121,28 +115,9 @@ class RandomRotate(object):
         mask = sample['label']
         
         num = random.randint(0,4)
-        # if mask.ndim == 2 :
-        #     im = np.rot90(img,num).copy()
-        #     mas = np.rot90(mask,num).copy()
-        # elif mask.ndim == 3 :
-        #     im = np.rot90(img,num).copy()
-        #     mas = np.rot90(mask,num).copy()
-        # elif mask.ndim == 4 :
-            # 3d image and 4 channel
         im = np.rot90(img,num,axes=(0,1))
         mas = np.rot90(mask,num,axes=(1,2))
-        # back = np.rot90(mask[0].copy(),num,axes=(-2, -1))
-        # body = np.rot90(mask[1].copy(),num,axes=(-2, -1))
-        # dend = np.rot90(mask[2].copy(),num,axes=(-2, -1))
-        # axon = np.rot90(mask[3].copy(),num,axes=(-2, -1))
-
-        # back = mask[0,::-1].copy()
-        # body = mask[1,::-1].copy()
-        # dend = mask[2,::-1].copy()
-        # axon = mask[3,::-1].copy()
         
-        # mask = np.stack((back,body,dend,axon))
-
         im = img
         mas = mask
         return {'image': im,
@@ -286,6 +261,21 @@ class FixedResize(object):
         return {'image': img,
                 'label': mask}
 
+from skimage.exposure import equalize_adapthist
+class Contrast_limited(object):
+    def __init__(self,size=128):
+        self.size=size
+
+    def __call__(self,sample): 
+        
+        img = sample['image']
+        mask = sample['label']
+
+        if random.random() < 0.5:
+            img = equalize_adapthist(img,self.size,nbins=255)
+
+        return {'image': img,
+                'label': mask}
 
 def denormalizeimage(images, mean=(0., 0., 0.), std=(1., 1., 1.)):
     """Denormalize tensor images with mean and standard deviation.

@@ -22,7 +22,6 @@ def resetseed(random_seed):
 #  kfold data
 
 def select_data(args):
-
     if args.datatype == 'uint8':
         #uint8 train
         imageDir= '../new_project_original_image/'
@@ -56,27 +55,26 @@ def select_data(args):
         tlabelDir = '../AIAR_orignal_data/test_full_color_label_data/'
 
     elif args.datatype == 'uint16_wise':
-        #uint16 train
+        # uint16 each image
         imageDir= '../AIAR_orignal_data/train_project_image/'
         labelDir = '../AIAR_orignal_data/stack_train_label/'
-        #edge dataset test
+        # uint16 each image test
         testDir= '../AIAR_orignal_data/test_project_image/'
         tlabelDir = '../AIAR_orignal_data/stack_test_label/'
 
     elif args.datatype == 'uint16_xray':
-        #uint16 train
+        # uint16 xray image
         imageDir= '../xraydataset/train_image/'
         labelDir = '../xraydataset/train_label/'
-        #edge dataset test
+        # uint16 xray test
         testDir= '../xraydataset/test_image/'
         tlabelDir = '../xraydataset/test_label/'
 
     elif args.datatype == 'scribble':
-        #edge dataset train
+        # scribble dataset train
         imageDir= '../AIAR_orignal_data/train_project_scrrible_image/'
         labelDir = '../AIAR_orignal_data/train_stack_scribble_project_label/'
-        
-        #edge dataset test
+        # scribble dataset test
         testDir= '../AIAR_orignal_data/test_project_scrrible_image/'
         tlabelDir = '../AIAR_orignal_data/stack_test_label/'
     
@@ -90,6 +88,8 @@ def divide_kfold(Datadir,args):
     train,valid = dict(),dict()
     
     if args.cross_validation == True:
+        
+        # if label has divide image 
         total_label = []
         for label in labels: 
             total_label.append(np.array(natsorted(glob(label+'/*'))))
@@ -126,7 +126,6 @@ def make_dataset(trainset,validset,args):
     num_workers = 16
     if 'xray' in args.datatype:
         from .mydatasetxray import mydataset_xray
-        
         MyDataset = {'train': DataLoader(mydataset_xray(trainset[0],validset[0],args.patchsize,
                             args.stride,args.oversample,phase='train'),
                             args.batch_size, 

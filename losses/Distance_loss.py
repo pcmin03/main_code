@@ -40,9 +40,9 @@ class Custom_Adaptive_gausian_DistanceMap(torch.nn.Module):
         i = channel
         # = torch.abs(predict[:,i:i+1]-label[:,i:i+1])
         if select_MAE == 'SIGRMSE'or select_MAE == 'MSE':
-            gau_numer = torch.pow(torch.abs(predict[:,i:i+1]-label[:,i:i+1]),2)
+            gau_numer = torch.pow(torch.abs(predict[:,i:i+1]-label[:,i:i+1]),2).clone().detach()
         elif select_MAE == 'SIGMAE' or select_MAE == 'MAE':
-            gau_numer = torch.abs(predict[:,i:i+1]-label[:,i:i+1])
+            gau_numer = torch.abs(predict[:,i:i+1]-label[:,i:i+1]).clone().detach()
         
         gau_deno = 1
         ch_gausian = torch.exp(-1*float(self.weight)*(gau_numer))
@@ -78,8 +78,6 @@ class Custom_Adaptive_gausian_DistanceMap(torch.nn.Module):
                     back_gt = torch.where(mask_inputs>self.treshold_value,zero_img,one_img)
                     # print(new_gt.shape,'self.back-filter')
                     # new_gt[:,0:1] = mask_inputs
-
-
         back_one,back_zero = self.gaussian_fn(net_output,new_gt,1,0,self.select_MAE)
         body_one,body_zero = self.gaussian_fn(net_output,new_gt,1,1,self.select_MAE)
         dend_one,dend_zero = self.gaussian_fn(net_output,new_gt,1,2,self.select_MAE)

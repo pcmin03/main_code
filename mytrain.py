@@ -2,27 +2,18 @@ import numpy as np
 import skimage 
 import os ,tqdm , random
 from glob import glob
+
+
 import torch
-import torch.nn.functional as F
-import yaml
-
-from torch import nn, optim
-from torchvision import models ,transforms
-from torch.utils.data import DataLoader, Dataset
-from torch.autograd import Variable
-from torch import Tensor
-#custom set#
-
 from utils.logger import Logger
 from utils.neuron_util import make_path
 
-
 from datacode.mydataset import *
-
 from models.mynetwork import init_model
 from losses.my_custom_loss import select_loss
-from myconfig import *
 from trainer import Trainer
+
+from myconfig import *
 
 def main(args): 
     
@@ -48,39 +39,30 @@ def main(args):
 
     #select loss
     loss_list,lossname = select_loss(args)
+    
     # logger 
     main_path, valid_path = make_path(args)
+
     #set log
     logger = Logger(main_path,valid_path+lossname,delete=args.deleteall)
 
     # continuous training
-    
-    # print('222222222222222222222',logger.log_dir)
-    # if os.path.exists(logger.log_dir+"lastsave_models{}.pt"):
-    #     print('==================load model================== ')
-    #     checkpoint = torch.load(logger.log_dir +"lastsave_models{}.pt")
-    #     model.load_state_dict(checkpoint['self.model_model'])
+    if os.path.exists(logger.log_dir+"lastsave_models{}.pt"):
+        print('==================load model==================')
+        checkpoint = torch.load(logger.log_dir +"lastsave_models{}.pt")
+        model.load_state_dict(checkpoint['self.model_model'])
 
     #import trainer
     Learner = Trainer(model, MyDataset,loss_list,logger,args,device)
-    
+
+    #use tarin
     if args.use_train == True: 
         Learner.train()
     Learner.test()
 
-
 if __name__ == '__main__': 
     args = my_config()
-    print(args.ADCE,'ADCE')
-    print(args.RECONGAU,'RECONGAU')
-    print(args.RECON,'RECON')
-    print('==============================')
-    print(args.RCE,'RCE')
-    print(args.NCE,'NCE')
-    print(args.NCDICE,'NCDICE')
-    print(args.BCE,'BCE')
+    print(f'ADCE:{args.ADCE},RECONGAU:{args.RECONGAU},RECON:{args.RECON}')
+    print('============Compare loss==================')
+    print(f'RCE:{args.RCE},NCE:{args.NCE},NCDICE:{args.NCDICE},BCE:{args.BCE}')
     main(args)
-
-
-
-
