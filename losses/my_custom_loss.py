@@ -9,7 +9,7 @@ def select_loss(args):
     #my loss
     if args.RECONGAU == True:
         criterion = Custom_Adaptive_gausian_DistanceMap(float(args.weight),distanace_map=args.class_weight,select_MAE=args.Aloss,
-                                                        treshold_value=args.mask_trshold,back_filter=args.back_filter,premask=args.premask)
+                                                        treshold_value=args.mask_trshold,back_filter=args.back_filter)
         if args.back_filter== True:
             labelname += 'back_filter_'
         labelname += 'seg_gauadaptive_'+str(args.Aloss)+'_'+str(int(args.weight))+'_'
@@ -39,7 +39,7 @@ def select_loss(args):
     #second loss
     if args.RECON == True:
         reconstruction_loss = Custom_RMSE_regularize(float(args.labmda),treshold_value=args.mask_trshold,select_MAE=args.Rloss,
-                                                    partial = args.partial_recon,premask=args.premask,clamp=args.clamp)
+                                                    partial = args.partial_recon)
         
         lossdict.update({'reconloss':reconstruction_loss})
         if args.partial_recon == True:

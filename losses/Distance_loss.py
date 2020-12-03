@@ -25,14 +25,13 @@ from skimage.morphology import medial_axis, skeletonize
 ######################################################################
 class Custom_Adaptive_gausian_DistanceMap(torch.nn.Module):
     
-    def __init__(self,weight,distanace_map=False,select_MAE='RMSE',treshold_value=0.35,back_filter=False,premask=True):
+    def __init__(self,weight,distanace_map=False,select_MAE='RMSE',treshold_value=0.35,back_filter=False):
         super(Custom_Adaptive_gausian_DistanceMap,self).__init__()
         self.weight = weight
         self.dis_map = distanace_map
         self.select_MAE = select_MAE
         self.treshold_value = treshold_value
         self.back_filter = back_filter
-        self.premask = premask
         self.MSE = nn.MSELoss()
 
     def gaussian_fn(self,predict,label,labmda,channel,select_MAE): 
@@ -67,17 +66,13 @@ class Custom_Adaptive_gausian_DistanceMap(torch.nn.Module):
         elif gt.dim() == 4 or gt.dim() == 5:
             # postive predict label
             new_gt = gt
-            if self.premask == True:
-                back_gt = torch.abs((1-mask_inputs))
-                gt[:,0:1] = back_gt
-            else:
-                if self.back_filter == True:
-                    zero_img = torch.zeros_like(mask_inputs)
-                    one_img = torch.ones_like(mask_inputs)
-                    mask_img = torch.where(mask_inputs>self.treshold_value,one_img,zero_img)
-                    back_gt = torch.where(mask_inputs>self.treshold_value,zero_img,one_img)
-                    # print(new_gt.shape,'self.back-filter')
-                    # new_gt[:,0:1] = mask_inputs
+            if self.back_filter == True:
+                zero_img = torch.zeros_like(mask_inputs)
+                one_img = torch.ones_like(mask_inputs)
+                mask_img = torch.where(mask_inputs>self.treshold_value,one_img,zero_img)
+                back_gt = torch.where(mask_inputs>self.treshold_value,zero_img,one_img)
+                # print(new_gt.shape,'self.back-filter')
+                # new_gt[:,0:1] = mask_inputs
         back_one,back_zero = self.gaussian_fn(net_output,new_gt,1,0,self.select_MAE)
         body_one,body_zero = self.gaussian_fn(net_output,new_gt,1,1,self.select_MAE)
         dend_one,dend_zero = self.gaussian_fn(net_output,new_gt,1,2,self.select_MAE)
@@ -150,19 +145,14 @@ class TVLoss(nn.Module):
 
 class Custom_RMSE_regularize(torch.nn.Module):
     def __init__(self,weight,distanace_map=False,treshold_value=0.2,
-            select_MAE='RMSE',partial=False,premask=True,clamp=True):
+            select_MAE='RMSE',partial=False):
         super(Custom_RMSE_regularize,self).__init__()
         self.weight = weight
         self.dis_map = distanace_map
         self.treshold_value = treshold_value
         self.select_MAE = select_MAE
-        
         self.partial = partial 
-        self.premask = premask
-        self.clamp = clamp
         
-        
-
     def make_mRMSE(self,feature):
         Bimg = feature[:,1:2]
         Dimg = feature[:,2:3]
@@ -173,13 +163,11 @@ class Custom_RMSE_regularize(torch.nn.Module):
     def forward(self,feature_output,mask_inputs,labels,activation='softmax'):
  
         #make mask image 
-        if self.premask == True:
-            mask_img = mask_inputs
-        else:
-            zero_img = torch.zeros_like(mask_inputs)
-            one_img = torch.ones_like(mask_inputs)
-            mask_img = torch.where(mask_inputs>self.treshold_value,one_img,zero_img)
-            back_mask_img = torch.where(mask_inputs>self.treshold_value,zero_img,one_img)
+
+        zero_img = torch.zeros_like(mask_inputs)
+        one_img = torch.ones_like(mask_inputs)
+        mask_img = torch.where(mask_inputs>self.treshold_value,one_img,zero_img)
+        back_mask_img = torch.where(mask_inputs>self.treshold_value,zero_img,one_img)
 
         # L1 loss
         if self.partial == True:
@@ -188,9 +176,7 @@ class Custom_RMSE_regularize(torch.nn.Module):
             body_part = (1-feature_output[:,0:1]) - (1-((1-feature_output[:,2:3]) * (1-feature_output[:,3:4] )))
             dend_part = (1-feature_output[:,0:1]) - (1-((1-feature_output[:,1:2]) * (1-feature_output[:,3:4] )))
             axon_part = (1-feature_output[:,0:1]) - (1-((1-feature_output[:,1:2]) * (1-feature_output[:,2:3] )))
-            if self.clamp == True:
-                dend_part = F.sigmoid(dend_part)
-                axon_part = F.sigmoid(axon_part)
+
             sum_output = axon_part
             back_output = dend_part
             

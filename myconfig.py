@@ -32,7 +32,6 @@ def my_config():
     parser.add_argument('--uselabel', default=False, action='store_true',help='make binary median image')
     parser.add_argument('--oversample', default=True, action='store_false',help='oversample')
 
-
     parser.add_argument('--use_train', default=True, action='store_false',help='make binary median image')
     parser.add_argument('--partial_recon', default=False, action='store_true',help='make binary median image')
     parser.add_argument('--class_weight', default=False, action='store_true',help='make binary median image')
@@ -47,19 +46,13 @@ def my_config():
     parser.add_argument('--RECONGAU',default=False, action='store_true',help='set reconstruction guaian loss')
     parser.add_argument('--RCE',default=False, action='store_true',help='set ReverseCross entropy')
     parser.add_argument('--NCE',default=False, action='store_true',help='set Normalized Cross entropy')
-
     parser.add_argument('--BCE',default=False, action='store_true',help='set Normalized Cross entropy')
-    parser.add_argument('--cross_validation',default=True, action='store_false',help='set Normalized Cross entropy')
-
     parser.add_argument('--NCDICE',default=False, action='store_true',help='set Normalized Cross entropy')
 
+    parser.add_argument('--cross_validation',default=True, action='store_false',help='set Normalized Cross entropy')
     parser.add_argument('--deleteall',default=False, action='store_true',help='set Adaptive_RMSE')
-
-
     parser.add_argument('--back_filter',default=True, action='store_false',help='set reconstruction guaian loss')
-    parser.add_argument('--premask',default=False, action='store_true',help='set reconstruction guaian loss')
-    parser.add_argument('--clamp',default=False, action='store_true',help='set reconstruction guaian loss')
-
+    
     parser.add_argument('--Aloss',default='RMSE',help='select ADRMSE loss',type=str)
     parser.add_argument('--Rloss',default='RMSE',help='select reconstruction loss',type=str)
     parser.add_argument('--Gloss',default='RMSE',help='select Garborloss',type=str)
@@ -69,7 +62,4 @@ def my_config():
 
     parser.add_argument('--modelname',default='newunet_compare',help='select Garborloss',type=str)
     parser.add_argument('--activation',default='sigmoid',help='select active',type=str)
-
-    parser.add_argument('--DISCRIM',default=False,help='set discriminate',type=bool)
-
     return parser.parse_args()

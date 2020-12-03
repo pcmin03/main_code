@@ -230,7 +230,62 @@ def detecion_box(img,predictions):
         img = skimage.color.gray2rgb(img).astype('uint8')
         img = cv2.rectangle(img, (x,y), (m,n), (255,255,0), 1)
     return img, boxes
+    
+def pre_oversampling(self,imgs,labeldata):
+    dend,axon,cross = [],[],[]
+    dend_n,axon_n,cross_n = 0,0,0
+    for num , (i,j) in enumerate(zip(labeldata[:,2],labeldata[:,3])):
 
+        if  i.any() >0 and j.any() > 0:
+            cross_n+=1
+            cross.append(num)
+        elif  i.any() > 0:
+            dend_n += 1
+            dend.append(num)
+        elif  j.any() > 0:
+            axon_n += 1
+            axon.append(num)
 
+    dend  = np.array(dend)
+    axon  = np.array(axon)
+    cross = np.array(cross)
 
+    _,dend_multipixel = np.unique(labeldata[cross,2],return_counts=True)
+    _,axon_multipixel = np.unique(labeldata[cross,3],return_counts=True)
+    _,dend_pixel = np.unique(labeldata[dend,2],return_counts=True)
+    _,axon_pixel = np.unique(labeldata[axon,3],return_counts=True)
+    
+    print(f"label variance : {np.unique(labeldata)}")
+    print(f"Number of pixels : {dend_multipixel,axon_multipixel,dend_pixel,axon_pixel}")
+    need_pixel = (dend_pixel[1]+dend_multipixel[1]) - (axon_pixel[1]+axon_multipixel[1])
+        
+    add_image = []
+    add_label = []
+    total_axon_pixel = 0
 
+    # skimage.io.imsave('axontest.tif',np.swapaxes(labeldata[axon],1,3)[...,3:4].astype('uint8')*255.)
+    # skimage.io.imsave('dedntest.tif',np.swapaxes(labeldata[axon],1,3)[...,2:3].astype('uint8')*255.)
+    print( axon)
+
+    while need_pixel >= total_axon_pixel:
+        num_axon = np.random.choice(axon,10)
+        add_axon = labeldata[num_axon]
+        _,axon_pixels = np.unique(add_axon,return_counts=True)
+        total_axon_pixel += axon_pixels[1]
+        add_label.append(add_axon)
+        add_image.append(imgs[num_axon])
+    
+    add_image = np.array(add_image)
+    add_label = np.array(add_label)
+    if add_label.ndim == 5: 
+        batch,zstack,channel,img_size,_= add_label.shape
+        add_image = add_image.reshape(batch*zstack,img_size,img_size)
+        add_label = add_label.reshape(batch*zstack,channel,img_size,img_size)
+    elif add_label.ndim == 6: 
+        batch,sample,channel,zstack,img_size,_= add_label.shape
+        add_image = add_image.reshape(batch*sample,zstack,img_size,img_size)
+        add_label = add_label.reshape(batch*sample,channel,zstack,img_size,img_size)
+
+    imgs = np.concatenate((imgs,add_image),axis=0)
+    labels = np.concatenate((labeldata,add_label),axis=0)
+    return imgs, labels
