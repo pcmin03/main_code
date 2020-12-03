@@ -1,0 +1,187 @@
+[33mcommit 020bbea9ffce777b7eae4c90cf1acc2fba49a01c[m[33m ([m[1;36mHEAD -> [m[1;32mmaster[m[33m)[m
+Author: pcmin03 <pcmin03@gmail.com>
+Date:   Thu Dec 3 04:29:36 2020 +0000
+
+    report project
+
+[33mcommit 0c10dbf19842379d0990c93fa88574f636bdd08f[m[33m ([m[1;31morigin/master[m[33m, [m[1;31morigin/HEAD[m[33m)[m
+Author: pcmin3 <pcmin03@gmail.com>
+Date:   Tue Dec 1 05:50:30 2020 +0000
+
+    deteleswa[
+
+[33mcommit ecaa0afd4a98eba54ada3c15682ad0608a58a246[m
+Author: pcmin03 <pcmin03@gmail.com>
+Date:   Sun Nov 29 16:14:32 2020 +0000
+
+    update
+
+[33mcommit c54b7c80ff8a05eff413e8ac95c048f2bf219756[m
+Author: pcmin03 <pcmin03@gmail.com>
+Date:   Fri Nov 27 17:07:54 2020 +0000
+
+    20201128
+
+[33mcommit 964a8b2dbefd7cf5eff731217d495823e2989856[m
+Author: pcmin03 <pcmin03@gmail.com>
+Date:   Wed Nov 25 11:05:58 2020 +0000
+
+    update
+
+[33mcommit 964a385e6b4753f2c0f79f0c23a5425c37621563[m
+Author: pcmin03 <pcmin03@gmail.com>
+Date:   Mon Nov 23 05:48:59 2020 +0000
+
+    20201123
+
+[33mcommit dd35d4e743a601d43dd454fbc0e02ab648949a7f[m
+Author: pcmin03 <pcmin03@gmail.com>
+Date:   Fri Nov 20 03:31:42 2020 +0000
+
+    updatenew
+
+[33mcommit ec4398562b91f8deb7116f31760aa1beb20f8bb6[m
+Author: pcmin03 <pcmin03@gmail.com>
+Date:   Wed Nov 18 18:37:31 2020 +0000
+
+    update
+
+[33mcommit 507ba37339da9c7460d0242c615a71787d887d4a[m
+Author: pcmin03 <pcmin03@gmail.com>
+Date:   Tue Nov 17 21:46:42 2020 +0000
+
+    update
+
+[33mcommit 326dd61092bb27a55edb5f35e6a3e138a16eee03[m
+Author: pcmin03 <pcmin03@gmail.com>
+Date:   Tue Nov 17 21:16:16 2020 +0000
+
+    update
+
+[33mcommit 472edad2d19c8cc10c72816349b0f2dbcbedfe7c[m
+Author: pcmin03 <pcmin03@gmail.com>
+Date:   Tue Nov 17 21:11:10 2020 +0000
+
+    update
+
+[33mcommit e6ea1dd7f1600d79764e8dd80d41eb943162a095[m
+Author: pcmin03 <pcmin03@gmail.com>
+Date:   Tue Nov 17 21:09:37 2020 +0000
+
+    complete reproduce
+
+[33mcommit fdcf36354c30368109cddf243b1a52cc89ab129e[m
+Author: pcmin03 <pcmin03@gmail.com>
+Date:   Tue Sep 29 11:24:12 2020 +0000
+
+    update
+
+[33mcommit 2beb0f0e0cd277b1ab7749bb1be13cfcb23ea0e2[m
+Merge: 270442b f7f5257
+Author: pcmin03 <pcmin03@gmail.com>
+Date:   Mon Jul 27 01:58:32 2020 +0000
+
+    Merge branch 'master' of https://github.com/pcmin03/ARAIProject
+
+[33mcommit 270442bafdbddd93fa14ebc0f924c9db7a2ae04e[m
+Author: pcmin03 <pcmin03@gmail.com>
+Date:   Mon Jul 27 01:55:29 2020 +0000
+
+    reproduce code
+
+[33mcommit f7f52572e4d70b6685dc6e03461266875de846af[m
+Merge: 83df626 d929e27
+Author: chanminpark <stickypanda03@gmail.com>
+Date:   Wed Jul 22 16:37:59 2020 +0900
+
+    Merge pull request #1 from pcmin03/cmpark
+    
+    Cmpark
+
+[33mcommit d929e278c8c08d601d87a8d9cc1281c966f9d77f[m
+Author: cmpark <pcmin03@gmail.com>
+Date:   Wed Jul 22 07:36:28 2020 +0000
+
+    update my code:
+
+[33mcommit df3b3c8bd5f2c6b9e2e20d92cf24fd59386a95a4[m
+Author: cmpark <pcmin03@gmail.com>
+Date:   Wed Jul 22 07:30:26 2020 +0000
+
+    update my code
+
+[33mcommit 83df626ac925419166614c2d3b6ccaa11a7e88fd[m
+Author: pcmin03 <pcmin03@gmail.com>
+Date:   Wed Jun 10 17:49:22 2020 +0900
+
+    add new network
+
+[33mcommit 96f99623252f1368c52133b4870cb4ff595ca2fd[m
+Author: pcmin03 <pcmin03@gmail.com>
+Date:   Wed May 27 00:23:44 2020 +0900
+
+    update_new_architecture
+
+[33mcommit cac64042ad21187de737093f0f2df33812d6c5eb[m
+Author: pcmin03 <pcmin03@gmail.com>
+Date:   Sat May 23 23:44:23 2020 +0900
+
+    add binary threshold
+
+[33mcommit 951130c21e97015b67a64ed180bf84b8e0f02b4d[m
+Author: cmpark <pcmin03@gmail.com>
+Date:   Mon May 18 20:18:56 2020 +0900
+
+    add adversarial loss
+
+[33mcommit b0b49ef76c42f38abc13499ca4dd7e47707259d8[m
+Author: cmpark <pcmin03@gmail.com>
+Date:   Thu May 14 16:45:59 2020 +0900
+
+    test
+
+[33mcommit 9dad600997bead4ca22c29454be8f817d4cb7936[m
+Author: cmpark <pcmin03@gmail.com>
+Date:   Thu May 14 15:57:49 2020 +0900
+
+    add Gaussian function loss
+
+[33mcommit 2add415cf4216450ff51330c20d70af69a631d9a[m
+Author: pcmin <stickypanda03@gmail.com>
+Date:   Tue May 5 13:54:25 2020 +0900
+
+    2020.05.05
+    
+    update network efficient unet ++
+
+[33mcommit 5a357bfccde7d9eb3cd7ac8e381a8d40f6e6ef82[m
+Author: chanminpark <stickypanda03@gmail.com>
+Date:   Wed Apr 22 01:33:08 2020 +0900
+
+    today_update
+
+[33mcommit 650542330f74a223da15685109b172a3ed7740ba[m
+Author: chanminpark <stickypanda03@gmail.com>
+Date:   Tue Apr 21 00:17:16 2020 +0900
+
+    my_resarch
+    
+    presently research code
+
+[33mcommit 56f9abaf8fc84f63794c463df4f95d96fdf17e73[m
+Author: chanminpark <stickypanda03@gmail.com>
+Date:   Tue Apr 7 00:13:49 2020 +0900
+
+    Create model
+
+[33mcommit 136756cb75924c000ca2c157bdf41af57693a4eb[m
+Author: pcmin <stickypanda03@gmail.com>
+Date:   Tue Apr 7 00:10:27 2020 +0900
+
+    new_commit
+
+[33mcommit e37734cbba4a621afcd6a548d2cf307722596b04[m
+Author: pcmin <stickypanda03@gmail.com>
+Date:   Tue Apr 7 00:09:48 2020 +0900
+
+    Initial commit
