@@ -29,10 +29,29 @@ class Logger(object):
         if delete == True:
             print(f'======================remove_Dir:{merge_path,self.log_dir}======================')
             print('======================remove_Dir:{merge_path,self.log_dir}======================')
-            shutil.rmtree(merge_path+'*',ignore_errors=True)
-            shutil.rmtree(self.log_dir+'*',ignore_errors=True)  
+            shutil.rmtree(merge_path,ignore_errors=True)
+            # shutil.rmtree(self.log_dir,ignore_errors=True)
+
         print(merge_path,self.log_dir )
         self.writer = SummaryWriter(merge_path)
+
+    def make_full_image(self,images_dict,s_point = 4): 
+
+        for i, img in enumerate(images_dict):
+            
+            images = images_dict[img][:16]
+            himag =[]
+            for j in range(s_point):
+                full_image=np.concatenate([images[j*4],images[j*4+1],images[j*4+2],images[j*4+3]],axis=-1)
+                himag.append(full_image)
+                
+            himag = np.array(himag)
+            full_image = np.concatenate([himag[0],himag[1],himag[2],himag[3]],axis=-2)
+            full_image = full_image[np.newaxis]
+            
+            images_dict[img] = full_image[0]
+            
+        return images_dict
         
     def summary_images(self,images_dict,step,phase):
         ### list of image ###
@@ -40,6 +59,7 @@ class Logger(object):
             if images_dict[img].dtype == 'uint16':
                 normalizedImg = (1024,1024)
                 images_dict[img] = cv2.normalize(images_dict[img],  normalizedImg, 0,255 , cv2.NORM_MINMAX).astype('uint8')
+            
             if images_dict[img].ndim == 4: 
                 self.writer.add_images(str(phase)+'/'+str(img),images_dict[img],step,dataformats='NHWC')
             elif images_dict[img].ndim == 3:
@@ -100,15 +120,15 @@ class Logger(object):
     
     def make_stack_image(self,image_dict):
         for i, img in enumerate(image_dict):
-            print(image_dict[img].shape,img)
-            image_dict[img] = image_dict[img].detach().cpu().numpy()
-            image_dict[img] = np.transpose(image_dict[img],(1,2,3,0))[...,0:1]
-            # image_dict[img] = np.swapaxes(image_dict[img],0,-1)[...,0:1]
 
-            print(image_dict[img].shape,img)
-        image_dict['_input'] = cv2.normalize(image_dict['_input'],(1024,1024), 0, 65535 , cv2.NORM_MINMAX).astype('uint16')
-        image_dict['prediction_map'] = cv2.normalize(image_dict['prediction_map'],(1024,1024), 0, 65535 , cv2.NORM_MINMAX)
-        image_dict['predict_channe_wise'] = cv2.normalize(image_dict['predict_channe_wise'],(1024,1024), 0, 65535 , cv2.NORM_MINMAX).astype('uint16')
+            # if image_dict[img].ndim() == 4:
+            image_dict[img] = image_dict[img][...,7,:,:]
+            image_dict[img] = np.transpose(image_dict[img],(1,2,3,0))[...,0:1]
+            if 'input' in img: 
+                image_dict[img] = cv2.normalize(image_dict[img],(1024,1024), 0,65535, cv2.NORM_MINMAX).astype('uint16')
+            # elif image_dict[img].ndim() == 5:
+            #     image_dict[img] = np.transpose(image_dict[img],(1,2,3,0))[...,0:1]
+            # image_dict[img] = np.swapaxes(image_dict[img],0,-1)[...,0:1]
 
         return image_dict 
 
@@ -122,47 +142,6 @@ class Logger(object):
             print("================testing=====================")
             for i, val in enumerate(vlaues):
                 print(f"========{val}=>{vlaues[val]}")
-
-    def make_full_image(self,imagename):
-        re_totals = natsorted(glob.glob(self.log_dir+imagename+'*'))
-
-        sample = skimage.io.imread(re_totals[0])
-        
-        width,_,_ = sample.shape
-        interval = int(1024/width)
-        re_t = []
-        re_total = []
-
-        for i in range(len(re_totals)):
-            img = skimage.io.imread(re_totals[i])
-            re_total.append(img)
-            if (i+1)%(int(interval*interval))==0:
-                re_t.append(np.array(re_total))
-                re_total = []
-        re_total = np.array(re_t)
-
-        new_image = []
-        # new_image = dict()
-        for i in range(len(re_total)):
-            himag =[]
-            one_image=re_total[i]
-            
-            for j in range(len(one_image)//interval):
-                full_image = cv2.hconcat([one_image[j*interval+num] for num in range(interval)])
-                # full_image=cv2.hconcat([one_image[j*4],one_image[j*4+1],one_image[j*4+2],one_image[j*4+3]])
-                himag.append(full_image)
-                if j==0:
-                    continue
-                elif j%(interval-1) == 0:
-                    new=np.array(himag)
-
-                    full_image2=cv2.vconcat([new[num] for num in range(interval)])
-                    # full_image2=cv2.vconcat([new[0],new[1],new[2],new[3]])
-                    # new_image.update({'full_image'+str(i):full_image2})
-                    new_image.append(full_image2)
-
-                
-        imsave(self.log_dir+imagename+'_full_image.tif',np.array(new_image))
 
     def save_csv_file(self,Class,name):
         import pandas

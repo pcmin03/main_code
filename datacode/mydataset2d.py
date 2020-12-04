@@ -222,5 +222,7 @@ class mydataset_2d(Dataset):
         _mask = np.where(image > 0.3,np.zeros_like(image),np.ones_like(image))[np.newaxis]
         label[0] = _mask
         clip = self.L_transform(image)
-        return clip.float(),label,_mask
+        _mask = self.L_transform(_mask).permute(1,0,2)
+        # print(_mask.shape,'2222222222222',self.L_transform(_mask).shape,'2222222223')
+        return clip.float(),torch.from_numpy(label),_mask.float()
 

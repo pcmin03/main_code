@@ -12,6 +12,7 @@ from datacode.mydataset import *
 from models.mynetwork import init_model
 from losses.my_custom_loss import select_loss
 from trainer import Trainer
+from trainer3D import Trainer3d
 
 from myconfig import *
 
@@ -20,9 +21,13 @@ def main(args):
     os.environ["CUDA_VISIBLE_DEVICES"]=str(args.gpu)
     #set devices
     print(torch.cuda.is_available(),'torch.cuda.is_available()')
+    
+    
     device = torch.device('cuda:0'if torch.cuda.is_available() else 'else')
-
-    #seed seeting
+    # torch.cuda.set_device(torch.device('cuda:0'))
+    print(torch.cuda.get_device_name(0))
+    
+    # seed seeting
     resetseed(random_seed=2020)
 
     #inport network
@@ -39,7 +44,7 @@ def main(args):
 
     #select loss
     loss_list,lossname = select_loss(args)
-    
+
     # logger 
     main_path, valid_path = make_path(args)
 

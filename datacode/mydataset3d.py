@@ -123,8 +123,15 @@ class mydataset_3d(Dataset):
         image = np.array(self.imgs[index])
         label = np.array(self.labels[index])
 
-        clip = self.L_transform(image)
+        
         label = np.stack(([np.where(label==i, np.ones_like(label),np.zeros_like(label)) for i in range(4)]))
-        print(image.max(),image.min())
-        return clip.float(),label,clip
+        
+        label[0] = np.where(image > 0.3,np.zeros_like(label[0]),np.ones_like(label[0]))  
+        # label[0] = np.ones_like(label[0]) - label[0]
+        
+        clip = self.L_transform(image)
+        # label = np.stack(([np.where(label==i, np.ones_like(label),np.zeros_like(label)) for i in range(4)]))
+        
+        
+        return clip.float(),label,clip.float()
 

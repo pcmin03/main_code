@@ -55,41 +55,40 @@ class Custom_Adaptive_gausian_DistanceMap(torch.nn.Module):
 
     def forward(self, net_output, gt,mask_inputs):
         
-        if gt.dim() == 3:
-            back_gt = torch.where(gt==0,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
-            body_gt = torch.where(gt==1,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
-            dend_gt = torch.where(gt==2,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1) 
-            axon_gt = torch.where(gt==3,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
-            back_output = net_output[:,0:1,:,:]
-            new_gt = torch.cat((back_gt, body_gt,dend_gt,axon_gt),dim=1).cuda().float()
+        # if gt.dim() == 3:
+        #     back_gt = torch.where(gt==0,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
+        #     body_gt = torch.where(gt==1,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
+        #     dend_gt = torch.where(gt==2,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1) 
+        #     axon_gt = torch.where(gt==3,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
+        #     back_output = net_output[:,0:1,:,:]
+        #     new_gt = torch.cat((back_gt, body_gt,dend_gt,axon_gt),dim=1).cuda().float()
 
-        elif gt.dim() == 4 or gt.dim() == 5:
+
             # postive predict label
-            new_gt = gt
-            if self.back_filter == True:
-                zero_img = torch.zeros_like(mask_inputs)
-                one_img = torch.ones_like(mask_inputs)
-                mask_img = torch.where(mask_inputs>self.treshold_value,one_img,zero_img)
-                back_gt = torch.where(mask_inputs>self.treshold_value,zero_img,one_img)
-                # print(new_gt.shape,'self.back-filter')
-                # new_gt[:,0:1] = mask_inputs
-        back_one,back_zero = self.gaussian_fn(net_output,new_gt,1,0,self.select_MAE)
-        body_one,body_zero = self.gaussian_fn(net_output,new_gt,1,1,self.select_MAE)
-        dend_one,dend_zero = self.gaussian_fn(net_output,new_gt,1,2,self.select_MAE)
-        axon_one,axon_zero = self.gaussian_fn(net_output,new_gt,1,3,self.select_MAE)
+            
+        if self.back_filter == True:
+            zero_img = torch.zeros_like(mask_inputs)
+            one_img = torch.ones_like(mask_inputs)
+            mask_img = torch.where(mask_inputs>self.treshold_value,one_img,zero_img)
+            back_gt = torch.where(mask_inputs>self.treshold_value,zero_img,one_img)
+
+        back_one,back_zero = self.gaussian_fn(net_output,gt,1,0,self.select_MAE)
+        body_one,body_zero = self.gaussian_fn(net_output,gt,1,1,self.select_MAE)
+        dend_one,dend_zero = self.gaussian_fn(net_output,gt,1,2,self.select_MAE)
+        axon_one,axon_zero = self.gaussian_fn(net_output,gt,1,3,self.select_MAE)
         
         # BEMAE,BOMAE,DEMAE,AXMAE = MAE[:,0:1],MAE[:,1:2],MAE[:,2:3],MAE[:,3:4]
         # BEMSE,BOMSE,DEMSE,AXMSE = MSE[:,0:1],MSE[:,1:2],MSE[:,2:3],MSE[:,3:4]
 
-        BEMAE = torch.abs(net_output[:,0:1] - new_gt[:,0:1])
-        BOMAE = torch.abs(net_output[:,1:2] - new_gt[:,1:2])
-        DEMAE = torch.abs(net_output[:,2:3] - new_gt[:,2:3])
-        AXMAE = torch.abs(net_output[:,3:4] - new_gt[:,3:4])
+        BEMAE = torch.abs(net_output[:,0:1] - gt[:,0:1])
+        BOMAE = torch.abs(net_output[:,1:2] - gt[:,1:2])
+        DEMAE = torch.abs(net_output[:,2:3] - gt[:,2:3])
+        AXMAE = torch.abs(net_output[:,3:4] - gt[:,3:4])
 
         if self.select_MAE == 'MAE' or self.select_MAE == 'MSE':
-            MAE = torch.abs(net_output - new_gt) #L1 loss
+            MAE = torch.abs(net_output - gt) #L1 loss
             MSE = torch.mul(MAE,MAE).float() 
-            return torch.mean(MAE).float()
+            return torch.mean(MSE).float()
 
         elif self.select_MAE == 'SIGRMSE':
             
@@ -102,7 +101,7 @@ class Custom_Adaptive_gausian_DistanceMap(torch.nn.Module):
             BOloss = (body_one + body_zero) * BOMSE
             DEloss = (dend_one + dend_zero) * DEMSE
             AXloss = (axon_one + axon_zero) * AXMSE
-
+            
             return torch.mean(BEMSE+BOMSE+DEloss+AXloss).float()
         
         elif self.select_MAE == 'SIGMAE':

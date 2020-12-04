@@ -1,7 +1,7 @@
 import torch
 from .my_network import *  
-from .my_network3d import ResidualUNet3D
-
+# from .unet3d.model import UNet3D
+from .unet3d_model.unet3d import UnetModel
 def dont_train(net):
     '''
     set training parameters to false.
@@ -40,9 +40,9 @@ def init_model(args,device):
         gen = pretrain_unet(1,4,args.activation).to(device)
             
     elif args.modelname =='ResidualUNet3D':
-        gen = ResidualUNet3D(1,4,final_sigmoid=args.activation).to(device)
-        
-            
+        # gen = UNet3D(1,4,final_sigmoid=args.activation).to(device)
+        gen = UnetModel(1,4).to(device)
+
     elif args.modelname =='multinewunet':
         gen = pretrain_multi_unet(1,1,args.activation).to(device)
 

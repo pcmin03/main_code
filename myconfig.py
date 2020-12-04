@@ -18,9 +18,7 @@ def my_config():
 
     parser.add_argument('--optimname',default='Adam',help='select schduler method',type=str)
     parser.add_argument('--datatype',default='uint16_wise', type=str)
-
     parser.add_argument('--mask_trshold',default=0.3,help='set fo end learning rate',type=float)
-
     parser.add_argument('--labmda',default=0.1,help='set fo end learning rate',type=float)
     parser.add_argument('--Kfold',default=10,help='set fo end learning rate',type=int)
     #preprocessing 
@@ -31,7 +29,6 @@ def my_config():
     parser.add_argument('--batch_size', default=60,help='stride',type=int)
     parser.add_argument('--uselabel', default=False, action='store_true',help='make binary median image')
     parser.add_argument('--oversample', default=True, action='store_false',help='oversample')
-
     parser.add_argument('--use_train', default=True, action='store_false',help='make binary median image')
     parser.add_argument('--partial_recon', default=False, action='store_true',help='make binary median image')
     parser.add_argument('--class_weight', default=False, action='store_true',help='make binary median image')

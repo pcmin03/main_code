@@ -17,7 +17,7 @@ import torch.autograd as autograd
 
 from utils.pytorchtools import EarlyStopping
 
-class Trainer():
+class Trainer:
     total_train_iter = 0
     total_valid_iter = 0
     
@@ -57,34 +57,38 @@ class Trainer():
 
         for i, batch in enumerate(tqdm(self.Mydataset[phase])):
             
-            self._input, self._label = Variable(batch[0]).to(self.device), Variable(batch[1]).to(self.device)
+            self._input, self._label = batch[0].to(self.device), Variable(batch[1].to(self.device))
             mask_ = Variable(batch[2]).to(self.device)
             self.optimizer.zero_grad()
-            torch.autograd.set_detect_anomaly(True)
-
+            # torch.autograd.set_detect_anomaly(True)
+            
             ##### train with source code #####
             with torch.set_grad_enabled(phase == 'train'):
-
+                
                 self.predict,self.prediction_map=self.model(self._input)
+                self.maks_predic,_ = self.model(mask_)
 
                 loss = self.loss_list['mainloss'](self.predict,self._label,mask_)
                 
+                loss += torch.pow((self.maks_predic-self._label),2)
+
                 if self.args.RECON:
                     recon_loss,self.sum_output,self.back_output = self.loss_list['reconloss'](self.predict,mask_,self._label,self.args.activation)
                     self.recon_loss.update(recon_loss.detach().item(),self._input.size(0))
                     loss += recon_loss  
                     
                 self.t_loss.update(loss.detach().item(),self._input.size(0))          
-    
+                
                 # print(recon_loss,CE_loss)
                 self.evaluator.add_batch(torch.argmax(self._label,dim=1).cpu().numpy(),torch.argmax(self.predict,dim=1).cpu().numpy())
                 result_dicts = self.evaluator.update()
-                #update self.logger
+                
                 self.t_loss.reset_dict()
                 total_score = self.t_loss.update_dict(result_dicts)
                 
                 if self.scheduler.__class__.__name__ != 'ReduceLROnPlateau':
                     self.scheduler.step()
+
                 if phase == 'train':
                     loss.backward()
                     self.optimizer.step()
@@ -103,7 +107,7 @@ class Trainer():
                     self.logger.summary_scalars({'IR':self.get_lr(self.optimizer)},self.total_valid_iter,tag='IR',phase=phase)
                     self.total_valid_iter += 1
                     self.logger.print_value(result_dicts,phase)
-        
+                    
         self.logger.print_value(result_dicts,phase)
         return result_dicts
     
@@ -112,16 +116,17 @@ class Trainer():
             return param_group['lr']
 
     def deployresult(self,epoch,phase):
-        print(f"label shape : {self._label.shape},featuer shape:,{self.prediction_map.shape},self.predict shape:{self.predict.shape}")
         
-        save_stack_images = {'_label':self._label * 255. ,'_input':self._input * 65535,
-                            'prediction_map':self.prediction_map,
-                            'predict_channe_wise':self.predict}
+        print(f"label shape : {self._label.shape},featuer shape:,{self.prediction_map.shape},self.predict shape:{self.predict.shape}")
+        save_stack_images = {'_label':self._label.detach().cpu().numpy() * 255. ,
+                            '_input':self._input.detach().cpu().numpy() * 65535.,
+                            'prediction_map':self.prediction_map.detach().cpu().numpy(),
+                            'predict_channe_wise':self.predict.detach().cpu().numpy()}
 
         # self._input = cv2.normalize(self._input,  normalizedImg, 0, 65535 , cv2.NORM_MINMAX)
-
         save_stack_images = self.logger.make_stack_image(save_stack_images)
-        pre_body = decode_segmap(torch.argmax(self.predict,dim=1).detach().cpu().numpy())
+        self.predict = self.predict[:,:,4].detach().cpu().numpy() 
+        pre_body = decode_segmap(np.argmax(self.predict,axis=1))
         pre_body = np.transpose(pre_body,(0,2,3,1))
 
         save_stack_images['_label'] = save_stack_images['_label'].astype('uint8')
@@ -160,7 +165,6 @@ class Trainer():
             
             self._input, self._label = Variable(batch[0]).to(self.device), Variable(batch[1]).to(self.device)
             mask_ = Variable(batch[2]).to(self.device)
-
             with torch.no_grad():
             ##### train with source code #####
                 self.predict,self.prediction_map=self.model(self._input)                    

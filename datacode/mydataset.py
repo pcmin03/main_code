@@ -139,9 +139,9 @@ def make_dataset(trainset,validset,args):
 
     elif '3d' in args.datatype: 
         from .mydataset3d import mydataset_3d 
-        MyDataset = {'train': DataLoader(mydataset_3d(trainset[1],validset[1],args.patchsize,
+        MyDataset = {'train': DataLoader(mydataset_3d(trainset[0],validset[0],args.patchsize,
                             args.stride,args.oversample,args.datatype,phase='train'),
-                            10, 
+                            args.batch_size,  
                             shuffle = True,
                             num_workers = num_workers),
                     'valid' : DataLoader(mydataset_3d(trainset[1],validset[1],args.patchsize,
