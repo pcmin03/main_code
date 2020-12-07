@@ -44,7 +44,7 @@ class Custom_Adaptive_gausian_DistanceMap(torch.nn.Module):
             gau_numer = torch.abs(predict[:,i:i+1]-label[:,i:i+1]).clone().detach()
         
         gau_deno = 1
-        ch_gausian = torch.exp(-1*float(self.weight)*(gau_numer))
+        ch_gausian = torch.exp(-1*float(self.weight)*(gau_numer)+0.03)
         if channel == 0: 
             ch_one  = ((label[:,i:i+1])*(ch_gausian)).float()
             ch_zero = (1-label[:,i:i+1]).float()

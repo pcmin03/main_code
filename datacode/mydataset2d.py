@@ -101,9 +101,9 @@ class mydataset_2d(Dataset):
             
             #set 3d custom transform  
             # self.t_trans= custom_transforms.RandomGaussianBlur(90)
-            self.t_trans2= custom_transforms.RandomHorizontalFlip(90)
-            self.t_trans3= custom_transforms.RandomRotate(90)
-            self.t_trans4= custom_transforms.RandomMultiple(90)
+            # self.t_trans2= custom_transforms.RandomHorizontalFlip(90)
+            # self.t_trans3= custom_transforms.RandomRotate(90)
+            # self.t_trans4= custom_transforms.RandomMultiple(90)
             
             self.T_trans = transforms.Compose([custom_transforms.RandomRotate(90),
                                                 custom_transforms.RandomHorizontalFlip(90),
@@ -212,7 +212,6 @@ class mydataset_2d(Dataset):
         
         if self.phase =='train':
             sample = {'image':image,'label':label}    
-            # sample = self.t_trans3(self.t_trans2(sample))
             sample = self.T_trans(sample)
             image = sample['image']
             label = sample['label']
@@ -223,6 +222,8 @@ class mydataset_2d(Dataset):
         label[0] = _mask
         clip = self.L_transform(image)
         _mask = self.L_transform(_mask).permute(1,0,2)
-        # print(_mask.shape,'2222222222222',self.L_transform(_mask).shape,'2222222223')
+
+
+        # print(_mask.shape,label.max(),label.min(),'2222222222222',clip.max(),clip.min(),'2222222223')
         return clip.float(),torch.from_numpy(label),_mask.float()
 

@@ -58,7 +58,10 @@ def main(args):
         model.load_state_dict(checkpoint['self.model_model'])
 
     #import trainer
-    Learner = Trainer(model, MyDataset,loss_list,logger,args,device)
+    if '3D' in args.datatype: 
+        Learner = Trainer3d(model, MyDataset,loss_list,logger,args,device)
+    else: 
+        Learner = Trainer(model, MyDataset,loss_list,logger,args,device)
 
     #use tarin
     if args.use_train == True: 

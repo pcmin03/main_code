@@ -69,8 +69,7 @@ class Trainer:
                 self.maks_predic,_ = self.model(mask_)
 
                 loss = self.loss_list['mainloss'](self.predict,self._label,mask_)
-                
-                loss += torch.pow((self.maks_predic-self._label),2)
+                # loss += torch.mean(torch.pow(torch.abs(self.maks_predic-self._label),2))
 
                 if self.args.RECON:
                     recon_loss,self.sum_output,self.back_output = self.loss_list['reconloss'](self.predict,mask_,self._label,self.args.activation)
@@ -125,10 +124,11 @@ class Trainer:
 
         # self._input = cv2.normalize(self._input,  normalizedImg, 0, 65535 , cv2.NORM_MINMAX)
         save_stack_images = self.logger.make_stack_image(save_stack_images)
-        self.predict = self.predict[:,:,4].detach().cpu().numpy() 
+        self.predict = self.predict.detach().cpu().numpy() 
         pre_body = decode_segmap(np.argmax(self.predict,axis=1))
+        # print(pre_body.shape)
         pre_body = np.transpose(pre_body,(0,2,3,1))
-
+        
         save_stack_images['_label'] = save_stack_images['_label'].astype('uint8')
         save_stack_images['prediction_map'] = save_stack_images['prediction_map'].astype('uint16')
         save_stack_images.update({'prediction_result':pre_body.astype('uint8')})

@@ -122,7 +122,7 @@ class Logger(object):
         for i, img in enumerate(image_dict):
 
             # if image_dict[img].ndim() == 4:
-            image_dict[img] = image_dict[img][...,7,:,:]
+            # image_dict[img] = image_dict[img][...,7,:,:]
             image_dict[img] = np.transpose(image_dict[img],(1,2,3,0))[...,0:1]
             if 'input' in img: 
                 image_dict[img] = cv2.normalize(image_dict[img],(1024,1024), 0,65535, cv2.NORM_MINMAX).astype('uint16')
