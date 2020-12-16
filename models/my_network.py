@@ -562,6 +562,68 @@ class pretrain_unet(nn.Module):
             result = x
 
         return result,x 
+class pretrain_MTL(nn.Module):
+    
+    def __init__(self,in_channels=1,classes=1,active='sigmoid'):
+        super(pretrain_MTL,self).__init__()
+        self.model = smp.Unet('resnet34',in_channels=1,classes=1,activation=None,encoder_weights=None)
+        
+        
+        self.decoders = list(self.model.decoder.children())[1]
+        
+        
+        self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
+
+        self.backlast = nn.Conv2d(32,1,1)
+        self.bodylast = nn.Conv2d(32,1,1)
+        self.dendlast = nn.Conv2d(32,1,1)
+        self.axonlast = nn.Conv2d(32,1,1)
+
+        if active == 'softmax':
+            self.sigmoid = nn.Softmax(dim=1)
+        elif active == 'sigmoid':
+            self.sigmoid = nn.Sigmoid()
+        self.active = active
+
+    def encoder_forward(self, x):
+        return self.model.encoder.forward(x)
+
+    def decoder_output(self,decoderlist,encoders):
+        class_layer = encoders[-1]
+        result = torch.cat([encoders[-2],self.upsample(encoders[5])],1)
+        d0 = decoderlist[0](result) 
+        d0 = torch.cat([encoders[-3],d0],1)
+        d1 = decoderlist[1](d0) 
+        d1 = torch.cat([encoders[-4],d1],1)
+        d2 = decoderlist[2](d1)
+        d2 = torch.cat([encoders[-5],d2],1)
+        d3 = decoderlist[3](d2)
+
+        return d3
+        
+
+    def forward(self,x):
+        encoders = self.encoder_forward(x)
+
+        last = self.decoder_output(self.decoders,encoders)
+
+        backlast = self.sigmoid(self.backlast(last))
+        bodylast = self.sigmoid(self.bodylast(last))
+        dendlast = self.sigmoid(self.dendlast(last))
+        axonlast = self.sigmoid(self.axonlast(last))
+        
+
+        # print(backlast.shape,bodylast.shape,dendlast.shape,axonlast.shape)
+        
+        result = torch.cat((backlast,bodylast,dendlast,axonlast),1)
+        
+        if self.active == 'sigmoid' or self.active == 'softmax':
+            result = result
+        else: 
+            result = result
+
+        return result,result 
+
 class pretrain_multi_unet(nn.Module):
     
     def __init__(self,in_channels=1,classes=1,active='sigmoid'):

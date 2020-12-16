@@ -24,6 +24,7 @@ from sklearn.preprocessing import MultiLabelBinarizer, OneHotEncoder
 import datacode.custom_transforms as custom_transforms
 import albumentations as A
 
+
 # import cupy as cp
 class mydataset_2d(Dataset):
     def __init__(self,imageDir,labelDir,patch_size,stride,oversampling,
@@ -71,56 +72,51 @@ class mydataset_2d(Dataset):
             mask4= (lab < 0.2) 
             lab[mask1],lab[mask2],lab[mask3] = 1,1,1 # cellbody # dendrite # axon
             lab[0] = np.where(np.sum(lab,axis=0)>0,np.zeros_like(lab[0]),np.ones_like(lab[0]))
-            
+
             #add noise
             # if self.phase == 'train': 
                 # lab[1] = dilation(lab[1], self.selem)
                 # lab[2] = dilation(lab[2], self.selem)
                 # lab[3] = dilation(lab[3], self.selem)
-            
+
+            lab = np.argmax(lab,axis=0)
             #make patch dataset
             if phase=='train':  
                 im_size = patch_size
                 ch_size = int(lab.shape[0])
                 images.append(view_as_windows(img ,(im_size,im_size),stride))
-                labels.append(view_as_windows(lab ,(ch_size,im_size,im_size),stride))
+                labels.append(view_as_windows(lab ,(im_size,im_size),stride))
                     
             else:
                 # this is validation case 
                 images.append(img)
                 labels.append(lab)
-        
+
         print(f"====start patch image=====")
         self.mean_thresh = global_thresh/len(self.imageDir)
         self.imgs = np.array(images)
         self.labels = np.array(labels)
-        
-        mean = self.imgs.mean() 
-        std = self.imgs.std()
         if phase =='train':
             
             #set 3d custom transform  
-            # self.t_trans= custom_transforms.RandomGaussianBlur(90)
-            # self.t_trans2= custom_transforms.RandomHorizontalFlip(90)
-            # self.t_trans3= custom_transforms.RandomRotate(90)
-            # self.t_trans4= custom_transforms.RandomMultiple(90)
-            
-            self.T_trans = transforms.Compose([custom_transforms.RandomRotate(90),
-                                                custom_transforms.RandomHorizontalFlip(90),
-                                                custom_transforms.Contrast_limited(128)]) 
-            num,_,_,patch,ch_size,im_size,_ = self.labels.shape
+            self.T_trans = A.Compose([
+                            A.HorizontalFlip(p=0.5),
+                            A.RandomRotate90(p=0.5),
+                            A.Rotate(limit=80,p=0.5)])
+
+            # self.T_trans = transforms.Compose([custom_transforms.RandomRotate(90),
+            #                                     custom_transforms.RandomHorizontalFlip(90)]) 
+            #                                     custom_transforms.Contrast_limited(128)
+            self.Ttranform = custom_transforms.Contrast_limited(128)
+            num,_,patch,im_size,_ = self.labels.shape
             self.imgs = np.reshape(self.imgs,[num*patch*patch,im_size,im_size])    
-            self.labels = np.reshape(self.labels,[num*patch*patch,ch_size,im_size,im_size])
-            print(f"imglen: {len(self.imgs)},imgshape:{self.imgs.shape}")
-            print(f"lablen:{len(self.labels)},labshape:{self.labels.shape}")
-            print("=====totalpatch=======")
-            
+            self.labels = np.reshape(self.labels,[num*patch*patch,im_size,im_size])            
             new_image = []
             new_label = []
 
             #data clean 
             for i,vlaue in enumerate(self.labels):
-                count_num = np.sum(1-vlaue[0])
+                count_num = np.sum(vlaue>0)
                 if count_num >= ((patch*patch)*0.5):
                     new_label.append(vlaue)
                     new_image.append(self.imgs[i])
@@ -128,77 +124,84 @@ class mydataset_2d(Dataset):
             self.imgs = np.array(new_image)
             self.labels = np.array(new_label)
 
-        self.L_transform =  transforms.Compose([
-                        transforms.ToTensor()])
-
+        print("=====totalpatch=======")
         print(f"imglen: {len(self.imgs)},imgshape:{self.imgs.shape}")
         print(f"lablen:{len(self.labels)},labshape:{self.labels.shape}")
-        print(f"totalmean: {mean},totalstd:{std}")
-        print("=====totalpatch=======")
-
+        
         if oversampling==True:
             print("=====oversampling=======")
             self.imgs,self.labels = self.pre_oversampling(self.imgs,self.labels)
             print(f"imglen: {len(self.imgs)},imgshape:{self.imgs.shape}")
             print(f"lablen:{len(self.labels)},labshape:{self.labels.shape}")
 
-    def pre_oversampling(self,imgs,labeldata):
-        dend = []
-        axon = []
-        cross = []
-        dend_n = 0
-        axon_n = 0
-        cross_n = 0
-        for num , (i,j) in enumerate(zip(labeldata[:,2],labeldata[:,3])):
+        self.mean = self.imgs.mean() 
+        self.std = self.imgs.std()
+        self.L_transform =  transforms.Compose([
+                transforms.Lambda(lambda image: torch.tensor(np.array(image).astype(np.float32)).unsqueeze(0))])
 
-            if  i.any() >0 and j.any() > 0:
+        print(f"totalmean: {self.mean},totalstd:{self.std}")
+
+    def pre_oversampling(self,imgs,labeldata):
+        body,dend,axon,cross = [],[],[],[]
+        dend_n,axon_n,cross_n = 0,0,0
+        for num , lab in enumerate(labeldata):
+            body_,dend_,axon_ = lab==1,lab==2,lab==3
+
+            if  body_.any() == 1 :
+                continue
+            
+            elif  dend_.any() > 0 and axon_.any() > 0:
                 cross_n+=1
                 cross.append(num)
 
-            elif  i.any() >0:
+            elif  dend_.any() >0:
                 dend_n += 1
                 dend.append(num)
-            elif  j.any() > 0:
+                
+            elif  axon_.any() > 0:
                 axon_n += 1
                 axon.append(num)
 
         dend = np.array(dend)
         axon  = np.array(axon)
         cross= np.array(cross)
-        
-        _ ,multipixel_dend = np.unique(labeldata[cross,2],return_counts=True)
-        _,multipixel_axon = np.unique(labeldata[cross,3],return_counts=True)
-        _,dend_pixel = np.unique(labeldata[dend,2],return_counts=True)
-        _,axon_pixel = np.unique(labeldata[axon,3],return_counts=True)
-        print(f"Number of pixels : {multipixel_dend,multipixel_axon,dend_pixel,axon_pixel}")
+        _ ,multipixel_dend = np.unique(labeldata[cross],return_counts=True)
+        _,dend_pixel = np.unique(labeldata[dend],return_counts=True)
+        _,axon_pixel = np.unique(labeldata[axon],return_counts=True)   
+        print(f"Number of pixels : {multipixel_dend,dend_pixel,axon_pixel}")
 
-        need_pixel = (dend_pixel[1]+multipixel_dend[1]) - (axon_pixel[1])
+        need_pixel = (dend_pixel[1]+multipixel_dend[1]) - (axon_pixel[1]+multipixel_dend[2])
         
         # make oversampling image
-        add_image = []
-        add_label = []
+        add_image,add_label = [],[]
         total_axon_pixel = 0
         while need_pixel >= total_axon_pixel:
-            num_axon = np.random.choice(axon,10)
-            add_axon = labeldata[num_axon,3:4]
+            num_axon = np.random.choice(axon,30)
+            add_axon = labeldata[num_axon]
             _,axon_pixels = np.unique(add_axon,return_counts=True)
             total_axon_pixel += axon_pixels[1]
-            add_label.append(add_axon)
             add_image.append(imgs[num_axon])
+            add_label.append(add_axon)
+
+        add_image,add_label= np.array(add_image), np.array(add_label)
+
+        num,patch,im_size,_=add_image.shape
+        add_image = np.reshape(add_image,(num*patch,im_size,im_size))
+        add_label = np.reshape(add_label,(num*patch,im_size,im_size))
         
-
-        add_image = np.array(add_image)
-        add_label = np.array(add_label)
-        zeros_label = np.zeros_like(add_label)
-        add_label = np.concatenate((zeros_label,zeros_label,zeros_label,add_label),axis=2)
-
-        batch,zstack,channel,img_size,_= add_label.shape
-        add_image = add_image.reshape(batch*zstack,img_size,img_size)
-        add_label = add_label.reshape(batch*zstack,channel,img_size,img_size)
-
-        # add dataset
         imgs = np.concatenate((add_image,imgs),axis=0)
         labels = np.concatenate((add_label,labeldata),axis=0)
+        # skimage.io.imsave('sampleaxon.tif',imgs[num_axon].astype('uint16')[...,np.newaxis])  
+        # skimage.io.imsave('samplededn.tif',add_axon.astype('uint8')[...,np.newaxis])
+              
+        img_sam,lab_sam = [],[]
+        for im,lab in zip(imgs,labels):
+            sample = self.T_trans(image=im, mask =lab)
+            img_sam.append(sample['image'])
+            lab_sam.append(sample['mask'])
+        imgs,labels = np.array(img_sam),np.array(lab_sam)
+        
+        print(f"Number of pixels : {total_axon_pixel,need_pixel}")
         return imgs, labels
 
     def __len__(self):
@@ -211,19 +214,22 @@ class mydataset_2d(Dataset):
         label = np.array(self.labels[index])
         
         if self.phase =='train':
-            sample = {'image':image,'label':label}    
-            sample = self.T_trans(sample)
-            image = sample['image']
-            label = sample['label']
-
-        label = np.array(label).astype('float32')
+            if label.any() == 3:
+                sample = self.T_trans(image=image,mask=label)
+                image = sample['image']
+                label = sample['mask']
+            # _mask = np.where(image > 65535*0.2,np.zeros_like(image),np.ones_like(image))
+            # image = (image -0.9669762930910421)/0.17558176262605804
+            label = [np.where((label==i),np.ones_like(label),np.zeros_like(label)) for i in range(4)]
+            # label[0] = _mask
+        else:
+            label = [np.where((label==i),np.ones_like(label),np.zeros_like(label)) for i in range(4)]
+        
+        label = np.array(label)
         image = image.astype(np.float64)
-        _mask = np.where(image > 0.3,np.zeros_like(image),np.ones_like(image))[np.newaxis]
-        label[0] = _mask
         clip = self.L_transform(image)
-        _mask = self.L_transform(_mask).permute(1,0,2)
-
-
-        # print(_mask.shape,label.max(),label.min(),'2222222222222',clip.max(),clip.min(),'2222222223')
-        return clip.float(),torch.from_numpy(label),_mask.float()
+        
+        # _mask = self.L_transform(_mask).permute(1,0,2)
+        
+        return clip.float(),torch.from_numpy(label),label[0]
 

@@ -59,7 +59,6 @@ class Logger(object):
             if images_dict[img].dtype == 'uint16':
                 normalizedImg = (1024,1024)
                 images_dict[img] = cv2.normalize(images_dict[img],  normalizedImg, 0,255 , cv2.NORM_MINMAX).astype('uint8')
-            
             if images_dict[img].ndim == 4: 
                 self.writer.add_images(str(phase)+'/'+str(img),images_dict[img],step,dataformats='NHWC')
             elif images_dict[img].ndim == 3:
@@ -106,23 +105,12 @@ class Logger(object):
         save_dir = self.log_dir
         
         for i, img in enumerate(images_dict):
-            
-            #change NCHW to NHWC save stack_image of TIF file
-            #3d image
             print(images_dict[img].shape,img)
-            # if images_dict[img].ndim == 4:
-            #     result_image = np.transpose(images_dict[img])
-            #2d image
-            # elif images_dict[img].ndim ==3:
-                # result_image = np.transpose(images_dict[img])
-
             imsave(save_dir+str(img)+str(step)+'.tif',images_dict[img])
     
     def make_stack_image(self,image_dict):
         for i, img in enumerate(image_dict):
-
-            # if image_dict[img].ndim() == 4:
-            # image_dict[img] = image_dict[img][...,7,:,:]
+            print(image_dict[img].shape,img)
             image_dict[img] = np.transpose(image_dict[img],(1,2,3,0))[...,0:1]
             if 'input' in img: 
                 image_dict[img] = cv2.normalize(image_dict[img],(1024,1024), 0,65535, cv2.NORM_MINMAX).astype('uint16')
@@ -133,16 +121,10 @@ class Logger(object):
         return image_dict 
 
     def print_value(self,vlaues,state='train'):
-        if state == 'train':
-            print("================trainning=====================")   
-            for i, val in enumerate(vlaues):
-                print(f"========{val}=>{vlaues[val]}")
-        
-        else :
-            print("================testing=====================")
-            for i, val in enumerate(vlaues):
-                print(f"========{val}=>{vlaues[val]}")
-
+        print(f'================{state}=====================')   
+        for i, val in enumerate(vlaues):
+            print(f"========{val}=>{vlaues[val]}")
+    
     def save_csv_file(self,Class,name):
         import pandas
         # for num,name in enumerate(Class):

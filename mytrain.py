@@ -22,7 +22,6 @@ def main(args):
     #set devices
     print(torch.cuda.is_available(),'torch.cuda.is_available()')
     
-    
     device = torch.device('cuda:0'if torch.cuda.is_available() else 'else')
     # torch.cuda.set_device(torch.device('cuda:0'))
     print(torch.cuda.get_device_name(0))
@@ -52,7 +51,8 @@ def main(args):
     logger = Logger(main_path,valid_path+lossname,delete=args.deleteall)
 
     # continuous training
-    if os.path.exists(logger.log_dir+"lastsave_models{}.pt"):
+    # if os.path.exists(logger.log_dir+"lastsave_models{}.pt"):
+    if args.pretrain == True:
         print('==================load model==================')
         checkpoint = torch.load(logger.log_dir +"lastsave_models{}.pt")
         model.load_state_dict(checkpoint['self.model_model'])

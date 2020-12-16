@@ -23,6 +23,7 @@ from skimage.morphology import medial_axis, skeletonize
 #-------------------------------RMSE---------------------------------#
 
 ######################################################################
+            
 class Custom_Adaptive_gausian_DistanceMap(torch.nn.Module):
     
     def __init__(self,weight,distanace_map=False,select_MAE='RMSE',treshold_value=0.35,back_filter=False):
@@ -39,79 +40,70 @@ class Custom_Adaptive_gausian_DistanceMap(torch.nn.Module):
         i = channel
         # = torch.abs(predict[:,i:i+1]-label[:,i:i+1])
         if select_MAE == 'SIGRMSE'or select_MAE == 'MSE':
-            gau_numer = torch.pow(torch.abs(predict[:,i:i+1]-label[:,i:i+1]),2).clone().detach()
+            gau_numer = torch.pow(torch.abs(predict[:,i:i+1]-label[:,i:i+1]),2)
         elif select_MAE == 'SIGMAE' or select_MAE == 'MAE':
-            gau_numer = torch.abs(predict[:,i:i+1]-label[:,i:i+1]).clone().detach()
+            gau_numer = torch.abs(predict[:,i:i+1]-label[:,i:i+1])
         
         gau_deno = 1
-        ch_gausian = torch.exp(-1*float(self.weight)*(gau_numer)+0.03)
+        ch_gausian = torch.exp(-1*float(self.weight)*(gau_numer))
+
         if channel == 0: 
-            ch_one  = ((label[:,i:i+1])*(ch_gausian)).float()
+            ch_one  = ((label[:,i:i+1])*(ch_gausian+0.03)).float()
             ch_zero = (1-label[:,i:i+1]).float()
         else : 
-            ch_one  = ((1-label[:,i:i+1])*(ch_gausian)).float()
+            ch_one  = ((1-label[:,i:i+1])*(ch_gausian+0.03)).float()
             ch_zero = (label[:,i:i+1]).float()
-        return ch_one,ch_zero
 
-    def forward(self, net_output, gt,mask_inputs):
+        return ch_one,ch_zero, gau_numer.float()
+
+    def forward(self, net_output, gt,mask_inputs,phase):
         
-        # if gt.dim() == 3:
-        #     back_gt = torch.where(gt==0,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
-        #     body_gt = torch.where(gt==1,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
-        #     dend_gt = torch.where(gt==2,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1) 
-        #     axon_gt = torch.where(gt==3,torch.ones_like(gt),torch.zeros_like(gt)).unsqueeze(1)
-        #     back_output = net_output[:,0:1,:,:]
-        #     new_gt = torch.cat((back_gt, body_gt,dend_gt,axon_gt),dim=1).cuda().float()
-
-
-            # postive predict label
-            
-        if self.back_filter == True:
+        # postive predict label            
+        if self.back_filter == True and phase == 'train':
             zero_img = torch.zeros_like(mask_inputs)
             one_img = torch.ones_like(mask_inputs)
             mask_img = torch.where(mask_inputs>self.treshold_value,one_img,zero_img)
             back_gt = torch.where(mask_inputs>self.treshold_value,zero_img,one_img)
+            gt[:,0:1] = back_gt
 
-        back_one,back_zero = self.gaussian_fn(net_output,gt,1,0,self.select_MAE)
-        body_one,body_zero = self.gaussian_fn(net_output,gt,1,1,self.select_MAE)
-        dend_one,dend_zero = self.gaussian_fn(net_output,gt,1,2,self.select_MAE)
-        axon_one,axon_zero = self.gaussian_fn(net_output,gt,1,3,self.select_MAE)
-        
+        back_one,back_zero,BEloss = self.gaussian_fn(net_output,gt,1,0,self.select_MAE)
+        body_one,body_zero,BOloss = self.gaussian_fn(net_output,gt,1,1,self.select_MAE)
+        dend_one,dend_zero,DEloss = self.gaussian_fn(net_output,gt,1,2,self.select_MAE)
+        axon_one,axon_zero,AXloss = self.gaussian_fn(net_output,gt,1,3,self.select_MAE)
+         
+        if self.select_MAE == 'MAE' or self.select_MAE == 'MSE':
+            # total_loss = torch.mean(BEloss)+torch.mean(BOloss)+torch.mean(DEloss)+torch.mean(AXloss)
+            total_loss = torch.mean(BEloss+BOloss+DEloss+AXloss)
+            
+            return total_loss
+
+        elif self.select_MAE == 'SIGRMSE' or  self.select_MAE == 'SIGMAE':
+            
+            # ADBEloss = (back_one + back_zero) * BEloss
+            # ADBOloss = (body_one + body_zero) * BOloss
+            ADDEloss = (dend_one + dend_zero) * DEloss
+            ADAXloss = (axon_one + axon_zero) * AXloss
+
+            total_loss = torch.mean(BEloss) + torch.mean(BOloss) + torch.mean(ADDEloss) + torch.mean(ADAXloss)
+            # total_loss = torch.mean(BEloss+BOloss+ADDEloss+ADAXloss)
+            
+            return total_loss/4
+
         # BEMAE,BOMAE,DEMAE,AXMAE = MAE[:,0:1],MAE[:,1:2],MAE[:,2:3],MAE[:,3:4]
         # BEMSE,BOMSE,DEMSE,AXMSE = MSE[:,0:1],MSE[:,1:2],MSE[:,2:3],MSE[:,3:4]
 
-        BEMAE = torch.abs(net_output[:,0:1] - gt[:,0:1])
-        BOMAE = torch.abs(net_output[:,1:2] - gt[:,1:2])
-        DEMAE = torch.abs(net_output[:,2:3] - gt[:,2:3])
-        AXMAE = torch.abs(net_output[:,3:4] - gt[:,3:4])
-
-        if self.select_MAE == 'MAE' or self.select_MAE == 'MSE':
-            MAE = torch.abs(net_output - gt) #L1 loss
-            MSE = torch.mul(MAE,MAE).float() 
-            return torch.mean(MSE).float()
-
-        elif self.select_MAE == 'SIGRMSE':
-            
-            BEMSE = torch.mul(BEMAE,BEMAE).float()
-            BOMSE = torch.mul(BOMAE,BOMAE).float()
-            DEMSE = torch.mul(DEMAE,DEMAE).float()
-            AXMSE = torch.mul(AXMAE,AXMAE).float()
-
-            BEloss = (back_one + back_zero) * BEMSE
-            BOloss = (body_one + body_zero) * BOMSE
-            DEloss = (dend_one + dend_zero) * DEMSE
-            AXloss = (axon_one + axon_zero) * AXMSE
-            
-            return torch.mean(BEMSE+BOMSE+DEloss+AXloss).float()
+        # BEMAE = torch.abs(net_output[:,0:1] - gt[:,0:1])
+        # BOMAE = torch.abs(net_output[:,1:2] - gt[:,1:2])
+        # DEMAE = torch.abs(net_output[:,2:3] - gt[:,2:3])
+        # AXMAE = torch.abs(net_output[:,3:4] - gt[:,3:4])
         
-        elif self.select_MAE == 'SIGMAE':
-            
-            BEloss = (back_one + back_zero) * BEMAE
-            BOloss = (body_one + body_zero) * BOMAE
-            DEloss = (dend_one + dend_zero) * DEMAE
-            AXloss = (axon_one + axon_zero) * AXMAE
-            return torch.mean(BEMAE+BOMAE+DEloss+AXloss).float()
+        # BEMSE = torch.pow(BEMAE,2)
+        # BOMSE = torch.pow(BOMAE,2)
+        # DEMSE = torch.pow(DEMAE,2)
+        # AXMSE = torch.pow(AXMAE,2)
         
+        # MAE = torch.abs(net_output - gt) #L1 loss
+        # MSE = torch.mul(MAE,MAE).float()
 ######################################################################
 
 #-----------------------------TV loss--------------------------------#
@@ -171,14 +163,17 @@ class Custom_RMSE_regularize(torch.nn.Module):
         # L1 loss
         if self.partial == True:
 
-            back_part = 1-mask_img
             body_part = (1-feature_output[:,0:1]) - (1-((1-feature_output[:,2:3]) * (1-feature_output[:,3:4] )))
             dend_part = (1-feature_output[:,0:1]) - (1-((1-feature_output[:,1:2]) * (1-feature_output[:,3:4] )))
             axon_part = (1-feature_output[:,0:1]) - (1-((1-feature_output[:,1:2]) * (1-feature_output[:,2:3] )))
 
-            sum_output = axon_part
-            back_output = dend_part
+            # sum_output = (feature_output[:,0:1] + feature_output[:,2:3])
+            # sum_output = torch.ones_like(sum_output) - torch.clamp(sum_output,0,1) 
+
+            # back_output = (1-feature_output[:,1:2])*(1-feature_output[:,3:4])
             
+            sum_output = dend_part
+            back_output = axon_part
             BOMAE = torch.abs(body_part - feature_output[:,1:2])
             DEMAE = torch.abs(dend_part - feature_output[:,2:3])
             AXMAE = torch.abs(axon_part - feature_output[:,3:4])

@@ -48,6 +48,7 @@ class AverageMeter(object):
 
         return [self.Mavg_dict,self.IOU_scalar,self.precision_scalar,self.recall_scalr,self.F1score_scalar]
 
+    
 
     def update(self, val, n=1):
         self.val = val

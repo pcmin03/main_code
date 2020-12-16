@@ -32,13 +32,19 @@ def init_model(args,device):
     
     elif args.modelname =='newunet_last':
         gen = pretrain_unet(1,4,args.activation).to(device)
+        
+    elif args.modelname =='unet_sample':
+        gen = pretrain_unet(1,4,args.activation).to(device)
     
     elif args.modelname =='unet_final':
         gen = pretrain_unet(1,4,args.activation).to(device)
 
     elif args.modelname =='unet_test':
         gen = pretrain_unet(1,4,args.activation).to(device)
-            
+
+    elif args.modelname == 'unet_MTL' :
+        gen = pretrain_MTL(1,1,args.activation).to(device)
+
     elif args.modelname =='ResidualUNet3D':
         # gen = UNet3D(1,4,final_sigmoid=args.activation).to(device)
         gen = UnetModel(1,4).to(device)

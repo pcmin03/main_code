@@ -122,14 +122,15 @@ class noiseCE(nn.Module):
         self.cross_entropy = torch.nn.CrossEntropyLoss()
         self.treshold_value = 0.3
         self.BCEloss = torch.nn.BCEWithLogitsLoss(reduction='mean')
+        self.CEloss = torch.nn.CrossEntropyLoss(ignore_index=254)
 
-    def forward(self,net_output, gt,mask_inputs):
+    def forward(self,net_output, gt,mask_inputs,phase):
 
         # if self.back_filter == True:
-        zero_img = torch.zeros_like(mask_inputs)
-        one_img = torch.ones_like(mask_inputs)
-        mask_img = torch.where(mask_inputs>self.treshold_value,one_img,zero_img)
-        back_gt = torch.where(mask_inputs>self.treshold_value,zero_img,one_img)
+        # zero_img = torch.zeros_like(mask_inputs)
+        # one_img = torch.ones_like(mask_inputs)
+        # mask_img = torch.where(mask_inputs>self.treshold_value,one_img,zero_img)
+        # back_gt = torch.where(mask_inputs>self.treshold_value,zero_img,one_img)
 
         # gt[:,0:1] = back_gt
 
@@ -140,6 +141,12 @@ class noiseCE(nn.Module):
         # net_output_float = torch.clamp(net_output_float, 1e-7, 1.0)
         # # net_output_max = torch.argmax(net_output_float,dim=1)
         # rce = (-1*torch.sum(net_output_float * torch.log(log_gt),dim=1)).mean()
+        if  phase == 'train':
+            zero_img = torch.zeros_like(mask_inputs)
+            one_img = torch.ones_like(mask_inputs)
+            mask_img = torch.where(mask_inputs>self.treshold_value,one_img,zero_img)
+            back_gt = torch.where(mask_inputs>self.treshold_value,zero_img,one_img)
+            gt[:,0:1] = back_gt
 
         if self.RCE == True:    
             # cross entropy
@@ -152,14 +159,31 @@ class noiseCE(nn.Module):
         
         if self.BCE == True:    
             # cross entropy
-            total_ce = 0
+            
+            # total_ce = 0
+            forground = gt[:,1:2] + gt[:,2:3] + gt[:,3:4]
+            forground = torch.clamp(forground, min=0, max=1)
+
+            ignore_part = torch.abs((1-gt[:,0:1]) - forground)
+            gt = torch.cat((gt,ignore_part),axis=1)
+
+            # skimage.io.imsave('samplelab.tif',(gt[:100].detach().cpu().numpy()*100).astype('uint8')[...,np.newaxis])
+            # skimage.io.imsave('sampleimg.tif',(net_output[:100].detach().cpu().numpy()*100).astype('uint8')[...,np.newaxis])
+
+            gt = torch.argmax(gt,axis=1)
+            gt[gt==4] = 254
+            gt = gt.view(-1)
+            # print(net_output.shape)
             num_classes = net_output.size()[1]
             net_output = net_output.contiguous()
-            net_output = net_output.view(-1, num_classes)
+            
+            net_output = net_output.view(-1, 4)
+            
 
-            gt = gt.view(-1,num_classes)
-            for i in [0,1,2,3]:     
-                total_ce += self.BCEloss(net_output[:,i].float(),gt[:,i])
+            total_ce = self.CEloss(net_output,gt)
+            # print(total_ce)
+            # for i in [0,1,2,3]:     
+            #     total_ce += self.BCEloss(net_output[:,i].float(),gt[:,i])
             
             return total_ce
 

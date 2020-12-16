@@ -90,10 +90,10 @@ def divide_kfold(Datadir,args):
     if args.cross_validation == True:
         
         # if label has divide image 
-        total_label = []
-        for label in labels: 
-            total_label.append(np.array(natsorted(glob(label+'/*'))))
-        labels = np.array(total_label)
+        # total_label = []
+        # for label in labels: 
+        #     total_label.append(np.array(natsorted(glob(label+'/*'))))
+        # labels = np.array(total_label)
         
         kfold = KFold(n_splits=args.Kfold)
         i = 0

@@ -7,14 +7,14 @@ def my_config():
     parser.add_argument('--gpu', default='0',help='comma separated list of GPU(s) to use.',type=str)
     parser.add_argument('--weight_decay',default=1e-8,help='set weight_decay',type=float)
     parser.add_argument('--weight',default=100,help='set Adaptive weight',type=float)
-    parser.add_argument('--start_lr',default=1e-4, help='set of learning rate', type=float)
-    parser.add_argument('--end_lr',default=1e-8,help='set fo end learning rate',type=float)
+    parser.add_argument('--start_lr',default=3e-3, help='set of learning rate', type=float)
+    parser.add_argument('--end_lr',default=3e-8,help='set fo end learning rate',type=float)
     parser.add_argument('--paralle',default=False,help='GPU paralle',type=bool)
     parser.add_argument('--scheduler',default='Cosine',help='select schduler method',type=str)
     parser.add_argument('--epochs',default=201,help='epochs',type=int)
     parser.add_argument('--out_class',default=4,help='set of output class',type=int)
     parser.add_argument('--changestep',default=10,help='change train to valid',type=int)
-    parser.add_argument('--pretrain',default=False,help='load pretrained',type=bool)
+    parser.add_argument('--pretrain',default=False,action='store_true',help='load pretrained')
 
     parser.add_argument('--optimname',default='Adam',help='select schduler method',type=str)
     parser.add_argument('--datatype',default='uint16_wise', type=str)
@@ -32,7 +32,7 @@ def my_config():
     parser.add_argument('--use_train', default=True, action='store_false',help='make binary median image')
     parser.add_argument('--partial_recon', default=False, action='store_true',help='make binary median image')
     parser.add_argument('--class_weight', default=False, action='store_true',help='make binary median image')
-
+# 4sigmoid_128_oversample_back_filter_seg_gauadaptive_SIGRMSE_100_reconloss_RMSE_1.0_0.3_
     #loss
     parser.add_argument('--ADRMSE',default=False, action='store_true',help='set A daptive_RMSE')
     parser.add_argument('--ADCE',default=False,help='set Adaptive_RMSE',type=bool)
