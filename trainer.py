@@ -37,11 +37,11 @@ class Trainer:
         self.device = device
 
         # LR 
-        self.optimizer = optim.Adam(self.model.parameters(),lr=args.start_lr)    
+        self.optimizer = optim.Adam(self.model.parameters(),lr=args.start_lr,weight_decay=args.weight_decay)    
         # evaluator
         self.evaluator = Evaluator(args.out_class)
         # scheuler
-        self.scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(self.optimizer,100,T_mult=1,eta_min=args.end_lr)
+        self.scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(self.optimizer,2,T_mult=2,eta_min=args.end_lr)
 
         self.t_loss = AverageMeter(args.out_class)
         self.recon_loss = AverageMeter(args.out_class)
@@ -60,21 +60,29 @@ class Trainer:
         for i, batch in enumerate(tqdm(self.Mydataset['train'])):
             
             self._input, self._label = batch[0].to(self.device), Variable(batch[1].to(self.device))
-            mask_ = Variable(batch[2]).to(self.device)
+            self.mask_ = Variable(batch[2]).to(self.device)
             self.optimizer.zero_grad()
             torch.autograd.set_detect_anomaly(True)
             
             ##### train with source code #####
                 
             self.predict,self.prediction_map=self.model(self._input)
+            
+
             # self.maks_predic,_ = self.model(mask_)
             
             loss = self.loss_list['mainloss'](self.predict,self._label,self._input,phase)
+
+            if self.scheduler.__class__.__name__ != 'ReduceLROnPlateau':
+                self.scheduler.step()
+            
+            self.m_predict = self.mask_
             # self.predict = torch.nn.functional.softmax(self.predict,dim=1)  
-            # loss += torch.mean(torch.pow(torch.abs(self.maks_predic-self._label),2))
+            # self.m_predict,_ =self.model(self.mask_)
+            # loss += torch.mean(torch.pow(torch.abs(self.m_predict-self.predict),2))
 
             if self.args.RECON:
-                recon_loss,self.sum_output,self.back_output = self.loss_list['reconloss'](self.predict,mask_,self._label,self.args.activation)
+                recon_loss,self.sum_output,self.back_output = self.loss_list['reconloss'](self.predict,self.mask_,self._label,self.args.activation)
                 self.recon_loss.update(recon_loss.detach().item(),self._input.size(0))
                 loss += recon_loss  
                 
@@ -117,17 +125,22 @@ class Trainer:
             for i, batch in enumerate(tqdm(self.Mydataset['valid'])):
                 
                 self._input, self._label = batch[0].to(self.device), Variable(batch[1].to(self.device))
-                mask_ = Variable(batch[2]).to(self.device)
+                self.mask_ = Variable(batch[2]).to(self.device)
                     
                 self.predict,self.prediction_map=self.model(self._input)
                 # self.maks_predic,_ = self.model(mask_)
                 
                 loss = self.loss_list['mainloss'](self.predict,self._label,self._input,phase)
+
+                self.m_predict = self.mask_
+                # self.m_predict,_ =self.model(self.mask_)
+                # loss += torch.mean(torch.pow(torch.abs(self.m_predict-self.predict),2))
+
                 # self.predict = torch.nn.functional.softmax(self.predict,dim=1)  
                 # loss += torch.mean(torch.pow(torch.abs(self.maks_predic-self._label),2))
 
                 if self.args.RECON:
-                    recon_loss,self.sum_output,self.back_output = self.loss_list['reconloss'](self.predict,mask_,self._label,self.args.activation)
+                    recon_loss,self.sum_output,self.back_output = self.loss_list['reconloss'](self.predict,self.mask_,self._label,self.args.activation)
                     self.recon_loss.update(recon_loss.detach().item(),self._input.size(0))
                     loss += recon_loss  
                     
@@ -162,7 +175,9 @@ class Trainer:
         save_stack_images = {'_label':self._label.detach().cpu().numpy() * 255. ,
                             '_input':self._input.detach().cpu().numpy() * 65535.,
                             'prediction_map':self.prediction_map.detach().cpu().numpy(),
-                            'predict_channe_wise':self.predict.detach().cpu().numpy()}
+                            'predict_channe_wise':self.predict.detach().cpu().numpy(),
+                            'mask_predict':(self.m_predict.detach().cpu().numpy()*65535.).astype('uint16'),
+                            'mask':self.mask_.detach().cpu().numpy().astype('uint8')*255.}
 
         if self.args.RECON:
             save_stack_images.update({'sum_ouput':self.sum_output.detach().cpu().numpy() * 65535.,
@@ -237,8 +252,6 @@ class Trainer:
             phase = 'train'
             
             result_dict = self.train_one_epoch(epoch,phase,self.total_train_iter)
-            if self.scheduler.__class__.__name__ != 'ReduceLROnPlateau':
-                self.scheduler.step(epoch)
             result_dict = self.valid_one_epoch(epoch,phase,self.total_valid_iter)
             self.save_model(epoch)
             if epoch % 5 == 0:

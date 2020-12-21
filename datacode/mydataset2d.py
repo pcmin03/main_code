@@ -107,7 +107,7 @@ class mydataset_2d(Dataset):
             # self.T_trans = transforms.Compose([custom_transforms.RandomRotate(90),
             #                                     custom_transforms.RandomHorizontalFlip(90)]) 
             #                                     custom_transforms.Contrast_limited(128)
-            self.Ttranform = custom_transforms.Contrast_limited(128)
+            # self.Ttranform = custom_transforms.Contrast_limited(128)
             num,_,patch,im_size,_ = self.labels.shape
             self.imgs = np.reshape(self.imgs,[num*patch*patch,im_size,im_size])    
             self.labels = np.reshape(self.labels,[num*patch*patch,im_size,im_size])            
@@ -196,7 +196,8 @@ class mydataset_2d(Dataset):
               
         img_sam,lab_sam = [],[]
         for im,lab in zip(imgs,labels):
-            sample = self.T_trans(image=im, mask =lab)
+            sample = {'image':im,'mask':lab}
+            # sample = self.T_trans(image=im, mask =lab)
             img_sam.append(sample['image'])
             lab_sam.append(sample['mask'])
         imgs,labels = np.array(img_sam),np.array(lab_sam)
@@ -214,12 +215,13 @@ class mydataset_2d(Dataset):
         label = np.array(self.labels[index])
         
         if self.phase =='train':
-            if label.any() == 3:
+            if label.any() == 2:
                 sample = self.T_trans(image=image,mask=label)
                 image = sample['image']
                 label = sample['mask']
             # _mask = np.where(image > 65535*0.2,np.zeros_like(image),np.ones_like(image))
             # image = (image -0.9669762930910421)/0.17558176262605804
+            # image = self.Ttranform(image)
             label = [np.where((label==i),np.ones_like(label),np.zeros_like(label)) for i in range(4)]
             # label[0] = _mask
         else:
@@ -227,9 +229,11 @@ class mydataset_2d(Dataset):
         
         label = np.array(label)
         image = image.astype(np.float64)
+        mask = np.where(image>0.3,np.ones_like(image),np.zeros_like(image))
+        mask = self.L_transform(mask)
         clip = self.L_transform(image)
         
         # _mask = self.L_transform(_mask).permute(1,0,2)
         
-        return clip.float(),torch.from_numpy(label),label[0]
+        return clip.float(),torch.from_numpy(label),mask
 

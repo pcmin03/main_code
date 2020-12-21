@@ -268,15 +268,12 @@ class Contrast_limited(object):
 
     def __call__(self,sample): 
         
-        img = sample['image']
-        mask = sample['label']
+        img = sample
 
         if random.random() < 0.5:
             img = equalize_adapthist(img,self.size,nbins=255)
 
-        return {'image': img,
-                'label': mask}
-
+        return img
 def denormalizeimage(images, mean=(0., 0., 0.), std=(1., 1., 1.)):
     """Denormalize tensor images with mean and standard deviation.
     Args:

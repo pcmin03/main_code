@@ -17,7 +17,7 @@ from scipy import ndimage
 
 from skimage.transform import resize
 from skimage.morphology import medial_axis, skeletonize
-    
+from skimage.filters import threshold_otsu,threshold_yen , threshold_local
 ######################################################################
 
 #-------------------------------RMSE---------------------------------#
@@ -45,7 +45,7 @@ class Custom_Adaptive_gausian_DistanceMap(torch.nn.Module):
             gau_numer = torch.abs(predict[:,i:i+1]-label[:,i:i+1])
         
         gau_deno = 1
-        ch_gausian = torch.exp(-1*float(self.weight)*(gau_numer))
+        ch_gausian = torch.exp(-1*torch.exp(torch.tensor(1).float().cuda())*(gau_numer))
 
         if channel == 0: 
             ch_one  = ((label[:,i:i+1])*(ch_gausian+0.03)).float()
@@ -62,6 +62,7 @@ class Custom_Adaptive_gausian_DistanceMap(torch.nn.Module):
         if self.back_filter == True and phase == 'train':
             zero_img = torch.zeros_like(mask_inputs)
             one_img = torch.ones_like(mask_inputs)
+            treshold_value = threshold_yen(mask_inputs.cpu().numpy()) 
             mask_img = torch.where(mask_inputs>self.treshold_value,one_img,zero_img)
             back_gt = torch.where(mask_inputs>self.treshold_value,zero_img,one_img)
             gt[:,0:1] = back_gt
