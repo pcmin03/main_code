@@ -65,7 +65,7 @@ class Custom_Adaptive_gausian_DistanceMap(torch.nn.Module):
             treshold_value = threshold_yen(mask_inputs.cpu().numpy()) 
             mask_img = torch.where(mask_inputs>self.treshold_value,one_img,zero_img)
             back_gt = torch.where(mask_inputs>self.treshold_value,zero_img,one_img)
-            gt[:,0:1] = back_gt
+            # gt[:,0:1] = back_gt
 
         back_one,back_zero,BEloss = self.gaussian_fn(net_output,gt,1,0,self.select_MAE)
         body_one,body_zero,BOloss = self.gaussian_fn(net_output,gt,1,1,self.select_MAE)
@@ -84,8 +84,8 @@ class Custom_Adaptive_gausian_DistanceMap(torch.nn.Module):
             # ADBOloss = (body_one + body_zero) * BOloss
             ADDEloss = (dend_one + dend_zero) * DEloss
             ADAXloss = (axon_one + axon_zero) * AXloss
-
-            total_loss = torch.mean(BEloss) + torch.mean(BOloss) + torch.mean(ADDEloss) + torch.mean(ADAXloss)
+            # torch.mean(BEloss) +
+            total_loss =  torch.mean(BOloss) + torch.mean(ADDEloss) + torch.mean(ADAXloss)
             # total_loss = torch.mean(BEloss+BOloss+ADDEloss+ADAXloss)
             
             return total_loss/4

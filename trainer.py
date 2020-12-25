@@ -69,18 +69,18 @@ class Trainer:
             self.predict,self.prediction_map=self.model(self._input)
             
 
-            # self.maks_predic,_ = self.model(mask_)
             
             loss = self.loss_list['mainloss'](self.predict,self._label,self._input,phase)
 
             if self.scheduler.__class__.__name__ != 'ReduceLROnPlateau':
                 self.scheduler.step()
             
-            self.m_predict = self.mask_
+            # self.m_predict = self.mask_
             # self.predict = torch.nn.functional.softmax(self.predict,dim=1)  
             # self.m_predict,_ =self.model(self.mask_)
             # loss += torch.mean(torch.pow(torch.abs(self.m_predict-self.predict),2))
 
+            loss += torch.mean(torch.abs(self.m_predict-self.predict))
             if self.args.RECON:
                 recon_loss,self.sum_output,self.back_output = self.loss_list['reconloss'](self.predict,self.mask_,self._label,self.args.activation)
                 self.recon_loss.update(recon_loss.detach().item(),self._input.size(0))
@@ -128,11 +128,10 @@ class Trainer:
                 self.mask_ = Variable(batch[2]).to(self.device)
                     
                 self.predict,self.prediction_map=self.model(self._input)
-                # self.maks_predic,_ = self.model(mask_)
                 
                 loss = self.loss_list['mainloss'](self.predict,self._label,self._input,phase)
 
-                self.m_predict = self.mask_
+                # self.m_predict = self.mask_
                 # self.m_predict,_ =self.model(self.mask_)
                 # loss += torch.mean(torch.pow(torch.abs(self.m_predict-self.predict),2))
 
@@ -227,13 +226,16 @@ class Trainer:
         for i, batch in enumerate(tqdm(self.Mydataset['valid'])):
             
             self._input, self._label = Variable(batch[0]).to(self.device), Variable(batch[1]).to(self.device)
-            mask_ = Variable(batch[2]).to(self.device)
+            self.mask_ = Variable(batch[2]).to(self.device)
             with torch.no_grad():
             ##### train with source code #####
                 self.predict,self.prediction_map=self.model(self._input)                    
                 # self.t_loss.update(loss.detach().item(),self._input.size(0))
-                
-                self.evaluator.add_batch(torch.argmax(self._label,dim=1).cpu().numpy(),torch.argmax(self.predict,dim=1).cpu().numpy())
+                # self.predict= (1-self.mask_) * self.predict
+                self.mas = 1-self.mask_.cpu().numpy()[:,0].astype('int')
+                sample_predict = torch.argmax(self.predict,dim=1).cpu().numpy() * self.mas
+                print(self.mas.shape,sample_predict.shape,'asdfasdfasd')
+                self.evaluator.add_batch(torch.argmax(self._label,dim=1).cpu().numpy(),sample_predict)
                 result_dicts = self.evaluator.update()
                 #update self.logger
                 self.t_loss.reset_dict()
