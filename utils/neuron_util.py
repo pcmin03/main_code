@@ -56,6 +56,9 @@ def decode_segmap(images, nc=4,name='full_4'):
         label_colors = np.array([(0,0,0),(254, 24, 254)])
     elif name =='axon':
         label_colors = np.array([(0,0,0), (0, 146, 146)])
+
+    elif name == 'full_3':
+        label_colors = np.array([(0,0,0),(254,24,254),(0,146,146)])
     elif name == 'full_4':
         label_colors = np.array([(0,0,0),(254,254,0),(254,24,254),(0,146,146)])
     elif name == 'full':

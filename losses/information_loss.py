@@ -28,7 +28,7 @@ from skimage.morphology import medial_axis, skeletonize
 class Custom_CE(torch.nn.Module):
     def __init__(self,weight,Gaussian=True,active='softmax'):
         super(Custom_CE,self).__init__()
-        self.weight = weight
+        # self.weight = weight
         self.Gaussian = Gaussian
         self.active = active
 
@@ -39,7 +39,7 @@ class Custom_CE(torch.nn.Module):
         dend,p_dend = target[:,2:3].requires_grad_(False),predict[:,2:3]
         axon,p_axon = target[:,3:4].requires_grad_(False),predict[:,3:4]
 
-        no_back = 1- back
+        no_back = 1 - back
         weightback = Variable(back/(1+(int(weight)* torch.abs(p_back - back.float()))).float())
         weightbody = Variable(back/(1+(int(weight)* torch.abs(p_body - body.float()))).float())
         weightdend = Variable(back/(1+(int(weight)* torch.abs(p_dend - dend.float()))).float())
@@ -54,59 +54,62 @@ class Custom_CE(torch.nn.Module):
 
     def Adaptive_NLLloss(self,predict, target,weight,Gaussianfn =False):
         
-        if active == 'softmax':
-            target = target.unsqueeze(1)
-            loss = predict.gather(1, target)
-            back = torch.where(target==0,torch.ones_like(target),torch.zeros_like(target)).float()
-            no_back = torch.where(target==0,torch.zeros_like(target),torch.ones_like(target)).float()
-        elif active == 'sigmoid':
-            return torch.mean(self.make_loss(predict,target))
+        # if active == 'softmax':
+        predict = F.log_softmax(predict)
+        # target[:,1] = topr.zeros_like(target[:,1])
+        loss = predict.gather(1, torch.argmax(target,1).unsqueeze(1))
+        # weight = torch.from_numpy(np.array(weight))
+        back = torch.where(target==0,torch.ones_like(target),torch.zeros_like(target)).float()
+        no_back = torch.where(target==0,torch.zeros_like(target),torch.ones_like(target)).float()
+        # elif active == 'sigmoid':
+        #     return torch.mean(self.make_loss(predict,target))
 
-        if Gaussianfn == False:
-            adptive_weight = Variable(back/(1+(int(weight)* torch.abs(predict[:,0:1] - back.float()))).float() +no_back)
-            adptive_weight = adptive_weight
-            # print(adptive_weight.max())
-        elif Gaussianfn == True:
+        # if Gaussianfn == False:
+        #     adptive_weight = Variable(back/(1+(int(weight)* torch.abs(predict[:,0:1] - back.float()))).float() +no_back)
+        #     adptive_weight = adptive_weight
+        #     # print(adptive_weight.max())
+        # elif Gaussianfn == True:
 
-            gau_numer = float(self.weight) *torch.abs(predict[:,0] - target.float())
-            gau_deno = torch.exp(torch.ones(1)).cuda().float()
-            gaussian_fc = torch.exp( -(gau_numer/gau_deno))
+        #     gau_numer = float(self.weight) *torch.abs(predict[:,0] - target.float())
+        #     gau_deno = torch.exp(torch.ones(1)).cuda().float()
+        #     gaussian_fc = torch.exp( -(gau_numer/gau_deno))
 
-            adptive_weight = (gaussian_fc) * back +no_back
-            adptive_weight = adptive_weight.unsqueeze(1)
-        
+        #     adptive_weight = (gaussian_fc) * back +no_back
+        #     adptive_weight = adptive_weight.unsqueeze(1)
         num_classes = predict.size()[1]
         batch_size = predict.size()[0]
 
-        weighted_logs  = (loss*adptive_weight).view(batch_size,-1)
+        weighted_logs  = (loss*(1+weight)).view(batch_size,-1)
+        # print((1+weight).max(),(1+weight).mean())
+        # i0 = 1
+        # i1 = 2
+        # pre = predict
+        # while i1 < len(predict.shape): # this is ugly but torch only allows to transpose two axes at once
+        #     predict = predict.transpose(i0, i1)
+        #     i0 += 1
+        #     i1 += 1
 
-        i0 = 1
-        i1 = 2
-        pre = predict
-        while i1 < len(predict.shape): # this is ugly but torch only allows to transpose two axes at once
-            predict = predict.transpose(i0, i1)
-            i0 += 1
-            i1 += 1
-
-        weighted_loss = weighted_logs.sum(1) / adptive_weight.view(batch_size,-1).sum(1)
+        weighted_loss = weighted_logs.sum(1) / weight.view(batch_size,-1).sum(1)
 
         return -1 * weighted_loss.mean()
 
-    def forward(self, net_output, gt,upsample=False):
+    def forward(self, net_output, gt,weight,upsample=False):
     
+        
         if upsample == True:
             gt = F.interpolate(gt.unsqueeze(1), net_output.size()[2:],mode='bilinear',align_corners =True).long()
             new_gt = gt
         
+
         gt = gt.long()
-        
+        # print(weight.shape,'????')
         if upsample == True:        
-            return  [self.Adaptive_NLLloss(net_output,gt,self.weight,Gaussianfn = self.Gaussian),new_gt]
+            return  [self.Adaptive_NLLloss(net_output,gt,weight,Gaussianfn = self.Gaussian),new_gt]
         else:
             if self.active == 'softmax':
-                return  self.Adaptive_NLLloss(net_output,gt,self.weight,Gaussianfn = self.Gaussian)
+                return  self.Adaptive_NLLloss(net_output,gt,weight,Gaussianfn = self.Gaussian)
             elif self.active == 'sigmoid':
-                return  self.Adaptive_NLLloss(net_output,gt,self.weight,Gaussianfn = self.Gaussian)
+                return  self.Adaptive_NLLloss(net_output,gt,weight,Gaussianfn = self.Gaussian)
 
 class noiseCE(nn.Module):
     def __init__(self,weight,RCE=False,NCE=False,SCE=False,BCE=False,back_filter=True):
@@ -122,7 +125,7 @@ class noiseCE(nn.Module):
         self.cross_entropy = torch.nn.CrossEntropyLoss()
         self.treshold_value = 0.3
         self.BCEloss = torch.nn.BCEWithLogitsLoss(reduction='mean')
-        self.CEloss = torch.nn.CrossEntropyLoss(ignore_index=254)
+        self.CEloss = torch.nn.NLLLoss(ignore_index=254)
 
     def forward(self,net_output, gt,mask_inputs,phase):
 
@@ -141,12 +144,12 @@ class noiseCE(nn.Module):
         # net_output_float = torch.clamp(net_output_float, 1e-7, 1.0)
         # # net_output_max = torch.argmax(net_output_float,dim=1)
         # rce = (-1*torch.sum(net_output_float * torch.log(log_gt),dim=1)).mean()
-        if  phase == 'train':
-            zero_img = torch.zeros_like(mask_inputs)
-            one_img = torch.ones_like(mask_inputs)
-            mask_img = torch.where(mask_inputs>self.treshold_value,one_img,zero_img)
-            back_gt = torch.where(mask_inputs>self.treshold_value,zero_img,one_img)
-            gt[:,0:1] = back_gt
+        # if  phase == 'train':
+        #     zero_img = torch.zeros_like(mask_inputs)
+        #     one_img = torch.ones_like(mask_inputs)
+        #     mask_img = torch.where(mask_inputs>self.treshold_value,one_img,zero_img)
+        #     back_gt = torch.where(mask_inputs>self.treshold_value,zero_img,one_img)
+        #     gt[:,0:1] = back_gt
 
         if self.RCE == True:    
             # cross entropy
@@ -159,25 +162,29 @@ class noiseCE(nn.Module):
         
         if self.BCE == True:    
             # cross entropy
+
+            # skimage.io.imsave('samplelab.tif',(gt[:100].detach().cpu().numpy()*100).astype('uint8')[...,np.newaxis])
+            # skimage.io.imsave('sampleimg.tif',(net_output[:100].detach().cpu().numpy()*100).astype('uint8')[...,np.newaxis])
             
             # total_ce = 0
-            forground = gt[:,1:2] + gt[:,2:3] + gt[:,3:4]
+
+            stack_mask_inputs = torch.cat((mask_inputs,mask_inputs,mask_inputs,mask_inputs))
+            forground = torch.sum(gt[:,1:4],axis=1).unsqueeze(1)
             forground = torch.clamp(forground, min=0, max=1)
 
             ignore_part = torch.abs((1-gt[:,0:1]) - forground)
             gt = torch.cat((gt,ignore_part),axis=1)
 
-            # skimage.io.imsave('samplelab.tif',(gt[:100].detach().cpu().numpy()*100).astype('uint8')[...,np.newaxis])
-            # skimage.io.imsave('sampleimg.tif',(net_output[:100].detach().cpu().numpy()*100).astype('uint8')[...,np.newaxis])
-
             gt = torch.argmax(gt,axis=1)
+            # skimage.io.imsave('samplelab.tif',(gt[:100].detach().cpu().numpy()).astype('uint8')[...,np.newaxis])
             gt[gt==4] = 254
-            gt = gt.view(-1)
+            # gt = gt.view(-1)
             # print(net_output.shape)
             num_classes = net_output.size()[1]
+            # print(num_classes,'num_classes')
             net_output = net_output.contiguous()
             
-            net_output = net_output.view(-1, 4)
+            # net_output = net_output.view(-1, num_classes)
             
 
             total_ce = self.CEloss(net_output,gt)
@@ -204,6 +211,35 @@ class noiseCE(nn.Module):
             
             return rce + nce
 
+class FocalLoss(nn.Module):
+    def __init__(self, gamma=2, alpha=None, size_average=True):
+        super(FocalLoss, self).__init__()
+        self.gamma = gamma
+        self.alpha = alpha
+        if isinstance(alpha,(float,int)): self.alpha = torch.Tensor([alpha,1-alpha])
+        if isinstance(alpha,list): self.alpha = torch.Tensor(alpha)
+        self.size_average = size_average
+    def forward(self, input, target,_input,phase):
+        if input.dim()>2:
+            input = input.view(input.size(0),input.size(1),-1)  # N,C,H,W => N,C,H*W
+            input = input.transpose(1,2)    # N,C,H*W => N,H*W,C
+            input = input.contiguous().view(-1,input.size(2))   # N,H*W,C => N*H*W,C
+        
+        target = torch.argmax(target,dim=1)
+        target = target.view(-1,1)
+        logpt = F.log_softmax(input)
+        logpt = logpt.gather(1,target)
+        logpt = logpt.view(-1)
+        pt = Variable(logpt.data.exp())
+        if self.alpha is not None:
+            if self.alpha.type()!=input.data.type():
+                self.alpha = self.alpha.type_as(input.data)
+            at = self.alpha.gather(0,target.data.view(-1))
+            logpt = logpt * Variable(at)
+
+        loss = -1 * (1-pt)**self.gamma * logpt
+        if self.size_average: return loss.mean()
+        else: return loss.sum()
 
 ######################################################################
 

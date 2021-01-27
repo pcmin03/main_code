@@ -560,8 +560,76 @@ class pretrain_unet(nn.Module):
             result = self.sigmoid(x)
         else: 
             result = x
+        return result,x 
+
+class pretrain_unet_plus(nn.Module):
+    def __init__(self,in_channels=1,classes=4,active='sigmoid'):
+        super(pretrain_unet_plus,self).__init__()
+        self.model = smp.UnetPlusPlus('resnet34',in_channels=1,classes=classes,activation=None,encoder_weights=None)
+        if active == 'softmax':
+            self.sigmoid = nn.Softmax(dim=1)
+        elif active == 'sigmoid':
+            self.sigmoid = nn.Sigmoid()
+        self.active = active
+    def forward(self,x):
+        x = self.model(x)
+        if self.active == 'sigmoid' or self.active == 'softmax':
+            result = self.sigmoid(x)
+        else: 
+            result = x
 
         return result,x 
+class pretrain_unet_plus_MTL(nn.Module):
+    
+    def __init__(self,in_channels=1,classes=1,active='sigmoid'):
+        super(pretrain_unet_plus_MTL,self).__init__()
+        self.model = smp.UnetPlusPlus('resnet34',in_channels=1,classes=32,activation=None,encoder_weights=None)
+        
+        # self.decoders = list(self.model.decoder.children())[1]
+        
+        # self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
+
+        self.backlast = nn.Conv2d(32,classes,1)
+        self.bodylast = nn.Conv2d(32,classes,1)
+        
+        if active == 'softmax':
+            self.sigmoid = nn.Softmax(dim=1)
+        elif active == 'sigmoid':
+            self.sigmoid = nn.Sigmoid()
+        self.softmax = nn.Softmax(dim=1)
+        self.active = self.sigmoid
+
+    def encoder_forward(self, x):
+        return self.model.encoder.forward(x)
+
+    def decoder_output(self,decoderlist,encoders):
+        # print(len(decoderlist)
+        class_layer = encoders[-1]
+        result = torch.cat([encoders[-2],self.upsample(encoders[5])],1)
+        d0 = decoderlist[0](result) 
+        d0 = torch.cat([encoders[-3],d0],1)
+        d1 = decoderlist[1](d0) 
+        d1 = torch.cat([encoders[-4],d1],1)
+        d2 = decoderlist[2](d1)
+        d2 = torch.cat([encoders[-5],d2],1)
+        d3 = decoderlist[3](d2)
+        return d3
+
+    def forward(self,x):
+        # encoders = self.encoder_forward(x)
+        # last = self.decoder_output(self.decoders,encoders)
+        last = self.model(x)
+        backlast = self.sigmoid(self.backlast(last))
+        sublast = self.bodylast(last)
+
+        if self.active == 'sigmoid' or self.active == 'softmax':
+            result = self.active(backlast)
+            # sublast = self.softmax(sublast)
+        else: 
+            result = backlast
+            # sublast = sublast
+        return result,sublast 
+
 class pretrain_MTL(nn.Module):
     
     def __init__(self,in_channels=1,classes=1,active='sigmoid'):
@@ -604,24 +672,89 @@ class pretrain_MTL(nn.Module):
 
     def forward(self,x):
         encoders = self.encoder_forward(x)
-
         last = self.decoder_output(self.decoders,encoders)
-
         backlast = self.sigmoid(self.backlast(last))
         bodylast = self.sigmoid(self.bodylast(last))
         dendlast = self.sigmoid(self.dendlast(last))
         axonlast = self.sigmoid(self.axonlast(last))
+        # print(backlast.shape,bodylast.shape,dendlast.shape,axonlast.shape)
+        result = torch.cat((backlast,bodylast,dendlast,axonlast),1)
+        if self.active == 'sigmoid' or self.active == 'softmax':
+            result = result
+        else: 
+            result = result
+        return result,result 
+
+class pretrain_MSL(nn.Module):
+    
+    def __init__(self,in_channels=1,classes=1,active='sigmoid'):
+        super(pretrain_MSL,self).__init__()
+        self.model = smp.Unet('resnet34',in_channels=1,classes=1,activation=None,encoder_weights=None)
+        
+        self.decoders = list(self.model.decoder.children())[1]
+        
+        self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
+        self.MSLmodel = smp.Unet('resnet34',in_channels=5,classes=4,activation=None,encoder_weights=None)
+        
+        self.totalast = nn.Conv2d(512,1,1)
+        self.backlast = nn.Conv2d(256,1,1)
+        self.bodylast = nn.Conv2d(128,1,1)
+        self.dendlast = nn.Conv2d(64,1,1)
+        self.axonlast = nn.Conv2d(64,1,1)
+        
+        if active == 'softmax':
+            self.sigmoid = nn.Softmax(dim=1)
+        elif active == 'sigmoid':
+            self.sigmoid = nn.Sigmoid()
+        self.active = active
+
+    def encoder_forward(self, x):
+        return self.model.encoder.forward(x)
+
+    def decoder_output(self,decoderlist,encoders):
+        class_layer = encoders[-1]
+        result = torch.cat([encoders[-2],self.upsample(encoders[5])],1)
+        d0 = decoderlist[0](result) 
+        d0 = torch.cat([encoders[-3],d0],1)
+        d1 = decoderlist[1](d0) 
+        d1 = torch.cat([encoders[-4],d1],1)
+        d2 = decoderlist[2](d1)
+        d2 = torch.cat([encoders[-5],d2],1)
+        d3 = decoderlist[3](d2)
+
+        return d3
         
 
-        # print(backlast.shape,bodylast.shape,dendlast.shape,axonlast.shape)
+    def forward(self,x,phase):
+        encoders = self.encoder_forward(x)
+        last = self.decoder_output(self.decoders,encoders)
+
+        if phase == 'train':
+            lastv1_scale = F.interpolate(encoders[-2],(128,128))
+            lastv2_scale = F.interpolate(encoders[-3],(128,128))
+            lastv3_scale = F.interpolate(encoders[-4],(128,128))
+            lastv4_scale = F.interpolate(encoders[-5],(128,128))
+        else: 
+            lastv1_scale = F.interpolate(encoders[-2],(1024,1024))
+            lastv2_scale = F.interpolate(encoders[-3],(1024,1024))
+            lastv3_scale = F.interpolate(encoders[-4],(1024,1024))
+            lastv4_scale = F.interpolate(encoders[-5],(1024,1024))
+        result = torch.cat((lastv1_scale,lastv2_scale,lastv3_scale,lastv4_scale),1)
+        result = self.totalast(result)
+
+        lastv1_scale = self.backlast(lastv1_scale)
+        lastv2_scale = self.bodylast(lastv2_scale)
+        lastv3_scale = self.dendlast(lastv3_scale)
+        lastv4_scale = self.axonlast(lastv4_scale)
         
-        result = torch.cat((backlast,bodylast,dendlast,axonlast),1)
+        result = torch.cat((result,lastv1_scale,lastv2_scale,lastv3_scale,lastv4_scale),1)
+        
+        result = self.MSLmodel(result)
         
         if self.active == 'sigmoid' or self.active == 'softmax':
             result = result
         else: 
             result = result
-
         return result,result 
 
 class pretrain_multi_unet(nn.Module):
@@ -715,9 +848,23 @@ class pretrain_deeplab_unet(nn.Module):
     def __init__(self,in_channels=1,classes=4,plus = True,active='sigmoid'):
         super(pretrain_deeplab_unet,self).__init__()
         if plus == True:
-            self.model = smp.DeepLabV3Plus('resnet34',in_channels=in_channels,classes=classes,activation=None,encoder_weights=None)
+            self.model = smp.timm-efficientnet-b3('resnet34',in_channels=in_channels,classes=classes,activation=None,encoder_weights=None)
         elif plus == False:
             self.model = smp.DeepLabV3('resnet34',in_channels=in_channels,classes=classes,activation=None,encoder_weights=None)
+        if active == 'softmax':
+            self.sigmoid = nn.Softmax(dim=1)
+        elif active == 'sigmoid':
+            self.sigmoid = nn.Sigmoid()
+    def forward(self,x):
+        x = self.model(x)
+        result = self.sigmoid(x)
+        return result,x 
+
+class pretrain_efficient_net(nn.Module):
+    def __init__(self,in_channels=1,classes=4,active='sigmoid'):
+        super(pretrain_efficient_net,self).__init__()
+        self.model = smp.Unet('efficientnet-b3',in_channels=in_channels,classes=classes,activation=None,encoder_weights=None)
+        
         if active == 'softmax':
             self.sigmoid = nn.Softmax(dim=1)
         elif active == 'sigmoid':

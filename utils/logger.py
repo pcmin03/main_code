@@ -127,11 +127,12 @@ class Logger(object):
     
     def save_csv_file(self,Class,name):
         import pandas
-        # for num,name in enumerate(Class):
-        df = pd.DataFrame(Class,columns =['back','body','dend','axon'])
+
         
+        df = pd.DataFrame(Class,columns =['back','dend','axon'])
         # df = pd.DataFrame(Class,columns =['back','forward'])
-        df.to_csv(self.log_dir +str(name)+'.csv')
+
+        df.to_csv(self.log_dir+'/'+str(name)+'.csv')
         
         
         

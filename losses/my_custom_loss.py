@@ -34,8 +34,14 @@ def select_loss(args):
     elif args.ADCE == True:
         criterion = Custom_CE(int(args.weight),Gaussian=False,active=args.activation)
         labelname += 'seg_adaptiveCE_'    
+    
+    elif args.FOCAL == True:
+        criterion = FocalLoss()
+        labelname += 'FOCAL'
+
     lossdict.update({'mainloss':criterion})
     
+    lossdict.update({'subloss':Custom_CE(1,Gaussian=False,active=args.activation)})
     #second loss
     if args.RECON == True:
         reconstruction_loss = Custom_RMSE_regularize(float(args.labmda),treshold_value=args.mask_trshold,select_MAE=args.Rloss,

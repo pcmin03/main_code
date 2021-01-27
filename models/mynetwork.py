@@ -26,25 +26,28 @@ def init_model(args,device):
 
     if args.modelname =='unet':
         gen = pretrain_unet(3,5).to(device)
-
-    elif args.modelname =='newunet':
-        gen = pretrain_unet(1,4,args.activation).to(device)
-    
-    elif args.modelname =='newunet_last':
-        gen = pretrain_unet(1,4,args.activation).to(device)
         
     elif args.modelname =='unet_sample':
         gen = pretrain_unet(1,4,args.activation).to(device)
     
-    elif args.modelname =='unet_final':
+    elif args.modelname =='unet_sample_anno':
         gen = pretrain_unet(1,4,args.activation).to(device)
 
-    elif args.modelname =='unet_test':
-        gen = pretrain_unet(1,4,args.activation).to(device)
+    elif args.modelname =='unet_MSL':
+        gen = pretrain_MSL(1,4,args.activation).to(device)
+
+    elif args.modelname == 'unet_plus' :
+        gen = pretrain_unet_plus(1,4,args.activation).to(device)
+
+    elif args.modelname == 'unet_plus_MTL' :
+        gen = pretrain_unet_plus_MTL(1,3,args.activation).to(device)
 
     elif args.modelname == 'unet_MTL' :
         gen = pretrain_MTL(1,1,args.activation).to(device)
 
+    elif args.modelname == 'unet_efficient' :
+        gen = pretrain_efficient_net(1,1,args.activation).to(device)
+    
     elif args.modelname =='ResidualUNet3D':
         # gen = UNet3D(1,4,final_sigmoid=args.activation).to(device)
         gen = UnetModel(1,4).to(device)
@@ -60,7 +63,4 @@ def init_model(args,device):
         
     elif args.modelname =='newunet_compare_new2':    
         gen = pretrain_unet(1,4,args.activation).to(device)
-
     return gen
-        
-            

@@ -56,21 +56,24 @@ class Custom_Adaptive_gausian_DistanceMap(torch.nn.Module):
 
         return ch_one,ch_zero, gau_numer.float()
 
-    def forward(self, net_output, gt,mask_inputs,phase):
-        
+    def forward(self, net_output, gt,mask_inputs,distance_map,phase):
+         
         # postive predict label            
-        if self.back_filter == True and phase == 'train':
+        if self.back_filter == True:
             zero_img = torch.zeros_like(mask_inputs)
             one_img = torch.ones_like(mask_inputs)
-            treshold_value = threshold_yen(mask_inputs.cpu().numpy()) 
-            mask_img = torch.where(mask_inputs>self.treshold_value,one_img,zero_img)
-            back_gt = torch.where(mask_inputs>self.treshold_value,zero_img,one_img)
+            # treshold_value = threshold_yen(mask_inputs.cpu().numpy()) 
+            # mask_img = torch.where(mask_inputs>self.treshold_value,one_img,zero_img)
+            # back_gt = torch.where(mask_inputs>self.treshold_value,zero_img,one_img)
             # gt[:,0:1] = back_gt
+            # stack_distance_map = torch.cat((distance_map,distance_map,distance_map,distance_map))
+            # print(stack_distance_map.shape)
+            # gt = gt*(1+stack_distance_map)
 
-        back_one,back_zero,BEloss = self.gaussian_fn(net_output,gt,1,0,self.select_MAE)
-        body_one,body_zero,BOloss = self.gaussian_fn(net_output,gt,1,1,self.select_MAE)
-        dend_one,dend_zero,DEloss = self.gaussian_fn(net_output,gt,1,2,self.select_MAE)
-        axon_one,axon_zero,AXloss = self.gaussian_fn(net_output,gt,1,3,self.select_MAE)
+        back_one,back_zero,BEloss = self.gaussian_fn(net_output,gt,distance_map,0,self.select_MAE)
+        # body_one,body_zero,BOloss = self.gaussian_fn(net_output,gt,distance_map,1,self.select_MAE)
+        dend_one,dend_zero,DEloss = self.gaussian_fn(net_output,gt,distance_map,1,self.select_MAE)
+        axon_one,axon_zero,AXloss = self.gaussian_fn(net_output,gt,distance_map,2,self.select_MAE)
          
         if self.select_MAE == 'MAE' or self.select_MAE == 'MSE':
             # total_loss = torch.mean(BEloss)+torch.mean(BOloss)+torch.mean(DEloss)+torch.mean(AXloss)
@@ -85,7 +88,7 @@ class Custom_Adaptive_gausian_DistanceMap(torch.nn.Module):
             ADDEloss = (dend_one + dend_zero) * DEloss
             ADAXloss = (axon_one + axon_zero) * AXloss
             # torch.mean(BEloss) +
-            total_loss =  torch.mean(BOloss) + torch.mean(ADDEloss) + torch.mean(ADAXloss)
+            total_loss = torch.mean(BEloss) + torch.mean(ADDEloss) + torch.mean(ADAXloss)
             # total_loss = torch.mean(BEloss+BOloss+ADDEloss+ADAXloss)
             
             return total_loss/4
@@ -164,9 +167,9 @@ class Custom_RMSE_regularize(torch.nn.Module):
         # L1 loss
         if self.partial == True:
 
-            body_part = (1-feature_output[:,0:1]) - (1-((1-feature_output[:,2:3]) * (1-feature_output[:,3:4] )))
-            dend_part = (1-feature_output[:,0:1]) - (1-((1-feature_output[:,1:2]) * (1-feature_output[:,3:4] )))
-            axon_part = (1-feature_output[:,0:1]) - (1-((1-feature_output[:,1:2]) * (1-feature_output[:,2:3] )))
+            body_part = (1-labels[:,0:1]) - (1-((1-feature_output[:,2:3]) * (1-feature_output[:,3:4] )))
+            dend_part = (1-labels[:,0:1]) - (1-((1-feature_output[:,1:2]) * (1-feature_output[:,3:4] )))
+            axon_part = (1-labels[:,0:1]) - (1-((1-feature_output[:,1:2]) * (1-feature_output[:,2:3] )))
 
             # sum_output = (feature_output[:,0:1] + feature_output[:,2:3])
             # sum_output = torch.ones_like(sum_output) - torch.clamp(sum_output,0,1) 

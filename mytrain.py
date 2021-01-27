@@ -67,10 +67,14 @@ def main(args):
     if args.use_train == True: 
         Learner.train()
     Learner.test()
-
+    print(logger.log_dir,'aaaaaaaaa')
 if __name__ == '__main__': 
     args = my_config()
     print(f'ADCE:{args.ADCE},RECONGAU:{args.RECONGAU},RECON:{args.RECON}')
     print('============Compare loss==================')
-    print(f'RCE:{args.RCE},NCE:{args.NCE},NCDICE:{args.NCDICE},BCE:{args.BCE}')
+    print(f'RCE:{args.RCE},NCE:{args.NCE},NCDICE:{args.NCDICE},BCE:{args.BCE},FOCAL:{args.FOCAL}')
     main(args)
+
+
+#     unet_sample_uint16_wise/5sigmoid_128_oversample_back_filter_seg_gauadaptive_SIGRMSE_100_part_reconloss2_RMSE_1.0
+# _0.2_/
