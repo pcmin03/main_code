@@ -114,9 +114,6 @@ class Logger(object):
             image_dict[img] = np.transpose(image_dict[img],(1,2,3,0))[...,0:1]
             if 'input' in img: 
                 image_dict[img] = cv2.normalize(image_dict[img],(1024,1024), 0,65535, cv2.NORM_MINMAX).astype('uint16')
-            # elif image_dict[img].ndim() == 5:
-            #     image_dict[img] = np.transpose(image_dict[img],(1,2,3,0))[...,0:1]
-            # image_dict[img] = np.swapaxes(image_dict[img],0,-1)[...,0:1]
 
         return image_dict 
 
@@ -127,47 +124,6 @@ class Logger(object):
     
     def save_csv_file(self,Class,name):
         import pandas
-
-        
         df = pd.DataFrame(Class,columns =['back','dend','axon'])
-        # df = pd.DataFrame(Class,columns =['back','forward'])
-
         df.to_csv(self.log_dir+'/'+str(name)+'.csv')
         
-        
-        
-
-
-    # def make_full_image(self,imageDir):
-    #     re_totals = natsorted(glob.glob(imageDir))
-
-    #     re_t = []
-    #     re_total = []
-    #     for i in range(len(re_totals)):
-    #         img = skimage.io.imread(re_totals[i])
-    #         re_total.append(img)
-    #         if (i+1)%16==0:
-    #     #         print(np.array(re_total).shape)
-    #             re_t.append(np.array(re_total))
-    #             re_total = []
-    #     re_total = np.array(re_t)
-
-    #     new_image =[]
-    #     for i in range(len(re_total)):
-    #         himag =[]
-    #         one_image=re_total[i]
-    #         for j in range(len(one_image)//4):
-    #             full_image=cv2.hconcat([one_image[j*4],one_image[j*4+1],one_image[j*4+2],one_image[j*4+3]])
-    #             himag.append(full_image)
-    #             if j==0:
-    #                 continue
-    #             elif j%3 == 0:
-    #                 new=np.array(himag)
-    #                 full_image2=cv2.vconcat([new[0],new[1],new[2],new[3]])
-    #                 new_image.append(full_image2)
-    #     final = dict()
-    #     full_image = np.array(new_image)
-    #     for i in range(len(full_image)):
-    #         final.update(['full_image'+str(i),full_image[i]])
-
-    #     save_images(self,final,0,True)

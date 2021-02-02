@@ -1,7 +1,28 @@
-# ARAIProject
-The advance of learning-based segmentation method has achieved remarkable success with sufficient training target and label pairs in medical image analysis. However, supervised learning based approaches have a concern that label quality determines its performance. We propose a noise-tolerant adaptive loss to mitigate high labeling cost without performance degradation in cell structure segmentation. Furthermore, we propose a reconstruction loss based on the prior knowledge of cell structure segmentation to avoid false prediction. We demonstrate that proposed loss outperforms state-of-the-art noise tolerant loss such as reverse cross entropy (RCE), normalized cross entropy (NCE) and NC-Dice as well as mean absolute error (MAE). 
+# Neuron segmentation using incomplete and noisy labels via adaptive learning with structure priors
+Recent advances in machine learning have shown significant success in biomedical image segmentation. %with sufficient training data for supervised learning in biomedical image analysis.Most existing high-quality segmentation algorithms rely on supervised learning with full training labels. However, such methods are more susceptible to label quality; besides, generating accurate labels in biomedical data is a labor- and time-intensive task. In this paper, we propose a novel neuron segmentation method that uses only incomplete and noisy labels.The proposed method employs a noise-tolerant adaptive loss that handles partially annotated labels. Moreover, the proposed reconstruction loss leverages prior knowledge of neuronal cell structures to reduce false segmentation near noisy labels.the proposed loss function outperforms several widely used state-of-the-art noise-tolerant losses, such as reverse cross entropy, normalized cross entropy and noise-robust dice losses.
 
-#####Result
+## datacode
+* mydataset
+   * mydataset2d
+   * mydataset3d
+* custom_transforms
+   * intensity transform 
+   * geometry transform 
+
+## Model
+* mynetwork
+   * Unet
+   * Unet ++
+   * EfficientUnet
+   * etc...
+ 
+## utils
+* logger
+* matric
+* ealry stopping
+
+
+# Result
 -----------
 
 ![Result](./pretrain_model_code/neuron_model/Picture11.png)

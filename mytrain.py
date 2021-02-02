@@ -58,16 +58,13 @@ def main(args):
         model.load_state_dict(checkpoint['self.model_model'])
 
     #import trainer
-    if '3D' in args.datatype: 
-        Learner = Trainer3d(model, MyDataset,loss_list,logger,args,device)
-    else: 
-        Learner = Trainer(model, MyDataset,loss_list,logger,args,device)
+    Learner = Trainer(model, MyDataset,loss_list,logger,args,device)
 
     #use tarin
     if args.use_train == True: 
         Learner.train()
     Learner.test()
-    print(logger.log_dir,'aaaaaaaaa')
+    
 if __name__ == '__main__': 
     args = my_config()
     print(f'ADCE:{args.ADCE},RECONGAU:{args.RECONGAU},RECON:{args.RECON}')

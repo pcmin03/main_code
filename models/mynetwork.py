@@ -37,7 +37,7 @@ def init_model(args,device):
         gen = pretrain_MSL(1,4,args.activation).to(device)
 
     elif args.modelname == 'unet_plus' :
-        gen = pretrain_unet_plus(1,4,args.activation).to(device)
+        gen = pretrain_unet_plus(1,3,args.activation).to(device)
 
     elif args.modelname == 'unet_plus_MTL' :
         gen = pretrain_unet_plus_MTL(1,3,args.activation).to(device)

@@ -85,8 +85,7 @@ def decode_segmap(images, nc=4,name='full_4'):
         # total_rgb.append(rgb)
     # print(np.array(total_rgb).shape,'imagesimagesimages')
     return np.array(rgb)
-# [0.0721 :background    0.35081569 0.35923216:dendrtie 0.45088235 0.92426118:body 0.9663341:background
-#  0.98877804 1.        ] 2323232
+    
 
 def multi_decode(multi_image,state):
     stack_img = []

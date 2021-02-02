@@ -69,7 +69,7 @@ def select_data(args):
         # uint16 xray test
         testDir= '../xraydataset/test_image/'
         tlabelDir = '../xraydataset/test_label/'
-
+# images/
     elif args.datatype == 'scribble':
         # scribble dataset train
         imageDir= '../AIAR_orignal_data/train_project_scrrible_image/'

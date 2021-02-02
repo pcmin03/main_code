@@ -57,6 +57,7 @@ class Custom_CE(torch.nn.Module):
         # if active == 'softmax':
         predict = F.log_softmax(predict)
         # target[:,1] = topr.zeros_like(target[:,1])
+        stack_weight = torch.cat([1-weight,weight,weight],axis=1)
         loss = predict.gather(1, torch.argmax(target,1).unsqueeze(1))
         # weight = torch.from_numpy(np.array(weight))
         back = torch.where(target==0,torch.ones_like(target),torch.zeros_like(target)).float()
@@ -79,7 +80,7 @@ class Custom_CE(torch.nn.Module):
         num_classes = predict.size()[1]
         batch_size = predict.size()[0]
 
-        weighted_logs  = (loss*(1+weight)).view(batch_size,-1)
+        weighted_logs  = (loss).view(batch_size,-1)
         # print((1+weight).max(),(1+weight).mean())
         # i0 = 1
         # i1 = 2

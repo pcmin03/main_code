@@ -40,7 +40,6 @@ class Trainer:
         # evaluator
         self.evaluator = Evaluator(args.out_class)
         # scheuler
-        # self.scheduler = optim.lr_scheduler.CosineAnnealingLR(self.optimizer,args.batch_size,eta_min=args.end_lr)
         self.scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(self.optimizer,2,T_mult=2,eta_min=args.end_lr)
 
         self.t_loss = AverageMeter(args.out_class)
@@ -66,47 +65,38 @@ class Trainer:
             torch.autograd.set_detect_anomaly(True)
             
             ##### train with source code #####
-                
             self.predict,self.prediction_map=self.model(self._input)
-            
-            # loss = self.CEloss(self.predict,torch.argmax(self._label,dim=1))
             loss = self.loss_list['mainloss'](self.predict,self._label,self._input,self.mask_,phase)
-            
             self.recon_loss.update(loss.detach().item(),self._input.size(0))
 
             subloss = self.loss_list['subloss'](self.prediction_map,self._label,self.mask_)
             self.t_loss.update(subloss.detach().item(),self._input.size(0))
-            loss = subloss
+            loss += subloss
 
             if self.scheduler.__class__.__name__ != 'ReduceLROnPlateau':
                 self.scheduler.step()
-            # self.m_predict = self.mask_
-            # self.predict = torch.nn.functional.softmax(self.predict,dim=1)  
-            # self.m_predict,_ =self.model(self.mask_)
-            # loss += torch.mean(torch.pow(torch.abs(self.m_predict-self.predict),2))
-
-            # loss += torch.mean(torch.abs(self.m_predict-self.predict))
+                
             if self.args.RECON:
                 recon_loss,self.sum_output,self.back_output = self.loss_list['reconloss'](self.predict,self.mask_,self.bodygt,self.args.activation)
                 self.recon_loss.update(recon_loss.detach().item(),self._input.size(0))
                 loss += recon_loss  
                 
-            # self.t_loss.update(loss.detach().item(),self._input.size(0))
             self.evaluator.add_batch(torch.argmax(self._label,dim=1).cpu().numpy(),torch.argmax(self.predict,dim=1).cpu().numpy())
             result_dicts = self.evaluator.update()
             
             self.t_loss.reset_dict()
-            
             total_score = self.t_loss.update_dict(result_dicts)
-            # if phase == 'train': 
+            
             loss.backward()
             self.optimizer.step()
+            
             self.total_train_iter += 1
             iteration_n = self.total_train_iter
             self.logger.list_summary_scalars(total_score,iteration_n,phase)
             self.logger.summary_scalars({'loss':self.t_loss.avg},iteration_n,'Losses',phase)
             self.logger.summary_scalars({'IR':self.get_lr(self.optimizer)},iteration_n,tag='IR',phase=phase)
             self.logger.summary_scalars({'reconloss':self.recon_loss.avg},iteration_n,'RLosses',phase)
+            self.logger.summary_scalars({'subloss':self.t_loss.avg},iteration_n,'sub_Losses',phase)
                 
         self.deployresult(epoch,phase)
         self.logger.print_value(result_dicts,phase)
@@ -136,32 +126,20 @@ class Trainer:
 
                 subloss = self.loss_list['subloss'](self.prediction_map,self._label,self.mask_)
                 self.t_loss.update(subloss.detach().item(),self._input.size(0))
-                loss = subloss
+                loss += subloss
 
-                # subloss = self.loss_list['subloss'](self.predict,self._label,self.mask_)
-                # self.recon_loss.update(subloss.detach().item(),self._input.size(0))
-                # loss = self.CEloss(self.predict,torch.argmax(self._label,dim=1))
-                # loss = self.loss_list['mainloss'](self.predict,self._label,self._input,self.mask_,phase)
-                # self.m_predict = self.mask_
-                # self.m_predict,_ =self.model(self.mask_)
-                # loss += torch.mean(torch.pow(torch.abs(self.m_predict-self.predict),2))
-
-                # self.predict = torch.nn.functional.softmax(self.predict,dim=1)  
-                # loss += torch.mean(torch.pow(torch.abs(self.maks_predic-self._label),2))
                 if self.args.RECON:
                     recon_loss,self.sum_output,self.back_output = self.loss_list['reconloss'](self.predict,self.mask_,self.bodygt,self.args.activation)
-                    # self.recon_loss.update(recon_loss.detach().item(),self._input.size(0))
+                    self.recon_loss.update(recon_loss.detach().item(),self._input.size(0))
                     loss += recon_loss  
                     
-                # self.t_loss.update(loss.detach().item(),self._input.size(0))
-                sample = torch.argmax(self._label,dim=1).cpu().numpy()==1
-                self.evaluator.add_batch(torch.argmax(self._label,dim=1).cpu().numpy(),np.where(torch.argmax(self.predict,dim=1).cpu().numpy()==1,sample,torch.argmax(self.predict,dim=1).cpu().numpy()))
+                # self.t_loss.update(subloss.detach().item(),self._input.size(0))
+                self.predict = torch.where(self.bodygt>0,torch.zeros_like(self.predict),self.predict)
+                self.evaluator.add_batch(torch.argmax(self._label,dim=1).cpu().numpy(),torch.argmax(self.predict,dim=1).cpu().numpy())
                 result_dicts = self.evaluator.update()
                 
                 self.t_loss.reset_dict()
-                
                 total_score = self.t_loss.update_dict(result_dicts)
-                    # if phase == 'train': 
                              
         self.logger.list_summary_scalars(total_score,iteration_n,phase)
         self.logger.summary_scalars({'loss':self.t_loss.avg},iteration_n,'Losses',phase)
@@ -169,8 +147,7 @@ class Trainer:
         self.logger.summary_scalars({'reconloss':self.recon_loss.avg},iteration_n,'RLosses',phase)
         self.total_valid_iter += 1
         iteration_n = self.total_valid_iter
-            # self.total_valid_iter += 1
-        # self.deployresult(i,phase)
+
         self.deployresult(epoch,phase)
         self.logger.print_value(result_dicts,phase)
         return result_dicts
@@ -187,11 +164,7 @@ class Trainer:
                             'prediction_map':self.prediction_map.detach().cpu().numpy()* 255.,
                             'predict_channe_wise':self.predict.detach().cpu().numpy()* 255.,
                             'mask':self.mask_.detach().cpu().numpy()}
-        # if self.args.RECON:
-        #     save_stack_images.update({'sum_ouput':self.sum_output.detach().cpu().numpy() * 65535.,
-        #                                 'back_output':self.back_output.detach().cpu().numpy() * 65535.})
 
-        # self._input = cv2.normalize(self._input,  nor.malizedImg, 0, 65535 , cv2.NORM_MINMAX)
         save_stack_images = self.logger.make_stack_image(save_stack_images)
         self.predict = self.predict.detach().cpu().numpy() 
 
@@ -237,15 +210,14 @@ class Trainer:
             
             self._input, self._label = Variable(batch[0]).to(self.device), Variable(batch[1]).to(self.device)
             self.mask_ = Variable(batch[2]).to(self.device).unsqueeze(1)
+            
+            self.bodygt = Variable(batch[3]).to(self.device).unsqueeze(0)
             with torch.no_grad():
             ##### train with source code #####
-                self.predict,self.prediction_map=self.model(self._input)                    
-                # self.t_loss.update(loss.detach().item(),self._input.size(0))
-                # self.predict= (1-self.mask_) * self.predict
-                self.mas = 1-self.mask_.cpu().numpy()[:,0].astype('int')
-                sample_predict = torch.argmax(self.predict,dim=1).cpu().numpy() * self.mas
-                print(self.mas.shape,sample_predict.shape,'asdfasdfasd')
-                self.evaluator.add_batch(torch.argmax(self._label,dim=1).cpu().numpy(),sample_predict)
+                self.predict,self.prediction_map=self.model(self._input)       
+            
+                self.predict = torch.where(self.bodygt>0,torch.zeros_like(self.predict),self.predict)
+                self.evaluator.add_batch(torch.argmax(self._label,dim=1).cpu().numpy(),torch.argmax(self.predict,dim=1).cpu().numpy())
                 result_dicts = self.evaluator.update()
                 #update self.logger
                 self.t_loss.reset_dict()
@@ -257,9 +229,8 @@ class Trainer:
                 
                 for num,name in enumerate(result_dicts):
                     new_list.append(result_dicts[name])
-                print(np.array(new_list).shape)
+                    
         new_list = np.array(new_list)
-        print(new_list.shape,'2323')
         self.logger.save_csv_file(new_list,phase)
         return result_dicts
     

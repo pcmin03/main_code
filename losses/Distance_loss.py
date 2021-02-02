@@ -63,9 +63,9 @@ class Custom_Adaptive_gausian_DistanceMap(torch.nn.Module):
             zero_img = torch.zeros_like(mask_inputs)
             one_img = torch.ones_like(mask_inputs)
             # treshold_value = threshold_yen(mask_inputs.cpu().numpy()) 
-            # mask_img = torch.where(mask_inputs>self.treshold_value,one_img,zero_img)
-            # back_gt = torch.where(mask_inputs>self.treshold_value,zero_img,one_img)
-            # gt[:,0:1] = back_gt
+            mask_img = torch.where(mask_inputs>self.treshold_value,one_img,zero_img)
+            back_gt = torch.where(mask_inputs>self.treshold_value,zero_img,one_img)
+            gt[:,0:1] = back_gt
             # stack_distance_map = torch.cat((distance_map,distance_map,distance_map,distance_map))
             # print(stack_distance_map.shape)
             # gt = gt*(1+stack_distance_map)
@@ -91,7 +91,7 @@ class Custom_Adaptive_gausian_DistanceMap(torch.nn.Module):
             total_loss = torch.mean(BEloss) + torch.mean(ADDEloss) + torch.mean(ADAXloss)
             # total_loss = torch.mean(BEloss+BOloss+ADDEloss+ADAXloss)
             
-            return total_loss/4
+            return total_loss/3
 
         # BEMAE,BOMAE,DEMAE,AXMAE = MAE[:,0:1],MAE[:,1:2],MAE[:,2:3],MAE[:,3:4]
         # BEMSE,BOMSE,DEMSE,AXMSE = MSE[:,0:1],MSE[:,1:2],MSE[:,2:3],MSE[:,3:4]
@@ -170,14 +170,14 @@ class Custom_RMSE_regularize(torch.nn.Module):
             body_part = (1-labels[:,0:1]) - (1-((1-feature_output[:,2:3]) * (1-feature_output[:,3:4] )))
             dend_part = (1-labels[:,0:1]) - (1-((1-feature_output[:,1:2]) * (1-feature_output[:,3:4] )))
             axon_part = (1-labels[:,0:1]) - (1-((1-feature_output[:,1:2]) * (1-feature_output[:,2:3] )))
-
+ 
             # sum_output = (feature_output[:,0:1] + feature_output[:,2:3])
             # sum_output = torch.ones_like(sum_output) - torch.clamp(sum_output,0,1) 
 
             # back_output = (1-feature_output[:,1:2])*(1-feature_output[:,3:4])
             
             sum_output = dend_part
-            back_output = axon_part
+            back_output = axon_part 
             BOMAE = torch.abs(body_part - feature_output[:,1:2])
             DEMAE = torch.abs(dend_part - feature_output[:,2:3])
             AXMAE = torch.abs(axon_part - feature_output[:,3:4])
