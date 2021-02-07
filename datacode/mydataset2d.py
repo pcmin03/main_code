@@ -43,56 +43,15 @@ class mydataset_2d(Dataset):
         
         # affine argumentation
         self.T_trans = A.Compose([
+                        A.RandomCrop(128,128),
                         A.HorizontalFlip(p=0.5),
                         A.RandomRotate90(p=0.5),
                         A.Rotate(limit=30,p=0.5)])    
         # intensity argumentation 
         self.Ttranform = custom_transforms.Contrast_limited(128)
-        
-        print(f"=====making dataset======")
-        for i in tqdm(range(len(self.imageDir))):
-            img = skimage.io.imread(self.imageDir[i]).astype('float32')
-            #noirmlize 0 to 1 image
-            img = (img - img.min()) / (img.max() - img.min())
 
-            lab = skimage.io.imread(self.labelDir[i])
-            lab = skimage.color.rgb2gray(lab)
-
-            #maks 1024 patch image
-            if img.shape[1] > 1024:
-                center = img.shape[1]//2
-                if img.ndim == 3: 
-                    img = img[:,center-512:center+512,center-512:center+512]
-                elif img.ndim == 2: 
-                    img = img[center-512:center+512,center-512:center+512]
-                
-                lab = lab[:,center-512:center+512,center-512:center+512]
-
-            lab = np.where(lab>0,np.ones_like(lab),np.zeros_like(lab))
-            lab[0] = np.where(np.sum(lab,axis=0)>0,np.zeros_like(lab[0]),np.ones_like(lab[0]))
-            lab = np.argmax(lab,axis=0)
-
-            #make distance map & zero-one normalization 
-            dist_img = distance_transform_edt(lab>0)
-            dist_img = (dist_img - dist_img.min())/ (dist_img.max() - dist_img.min())
-                
+        #     #make distance map & zero-one normalization 
             
-            if phase=='train':  
-                # make patch image , using   
-                im_size = patch_size
-                ch_size = int(lab.shape[0])
-                images.append(view_as_windows(img ,(im_size,im_size),stride))
-                labels.append(view_as_windows(lab ,(im_size,im_size),stride))
-                distance_map.append(view_as_windows(dist_img,(im_size,im_size),stride))
-
-            else:
-                # this is validation case 
-                images.append(img)
-                labels.append(lab)
-                distance_map.append(dist_img)
-        
-                
-
         print(f"====start patch image=====")
         self.imgs = np.array(images)
         self.labels = np.array(labels)
@@ -137,64 +96,64 @@ class mydataset_2d(Dataset):
         self.L_transform =  transforms.Compose([
                 transforms.Lambda(lambda image: torch.tensor(np.array(image).astype(np.float32)).unsqueeze(0))])
 
-    def pre_oversampling(self,imgs,labeldata,distance_map):
-        body,dend,axon,cross = [],[],[],[]
-        dend_n,axon_n,cross_n = 0,0,0
-        for num , lab in enumerate(labeldata):
-            body_,dend_,axon_ = lab==1,lab==2,lab==3
+    # def pre_oversampling(self,imgs,labeldata,distance_map):
+    #     body,dend,axon,cross = [],[],[],[]
+    #     dend_n,axon_n,cross_n = 0,0,0
+    #     for num , lab in enumerate(labeldata):
+    #         body_,dend_,axon_ = lab==1,lab==2,lab==3
 
-            if  body_.any() == 1 :
-                continue
+    #         if  body_.any() == 1 :
+    #             continue
             
-            elif  dend_.any() > 0 and axon_.any() > 0:
-                cross_n+=1
-                cross.append(num)
+    #         elif  dend_.any() > 0 and axon_.any() > 0:
+    #             cross_n+=1
+    #             cross.append(num)
 
-            elif  dend_.any() >0:
-                dend_n += 1
-                dend.append(num)
+    #         elif  dend_.any() >0:
+    #             dend_n += 1
+    #             dend.append(num)
                 
-            elif  axon_.any() > 0:
-                axon_n += 1
-                axon.append(num)
+    #         elif  axon_.any() > 0:
+    #             axon_n += 1
+    #             axon.append(num)
 
-        dend = np.array(dend)
-        axon  = np.array(axon)
-        cross= np.array(cross)
-        _ ,multipixel_dend = np.unique(labeldata[cross],return_counts=True)
-        _,dend_pixel = np.unique(labeldata[dend],return_counts=True)
-        _,axon_pixel = np.unique(labeldata[axon],return_counts=True)   
-        print(f"Number of pixels : {multipixel_dend,dend_pixel,axon_pixel}")
+    #     dend = np.array(dend)
+    #     axon  = np.array(axon)
+    #     cross= np.array(cross)
+    #     _ ,multipixel_dend = np.unique(labeldata[cross],return_counts=True)
+    #     _,dend_pixel = np.unique(labeldata[dend],return_counts=True)
+    #     _,axon_pixel = np.unique(labeldata[axon],return_counts=True)   
+    #     print(f"Number of pixels : {multipixel_dend,dend_pixel,axon_pixel}")
 
-        need_pixel = (dend_pixel[1]+multipixel_dend[1]) - (axon_pixel[1]+multipixel_dend[2])
+    #     need_pixel = (dend_pixel[1]+multipixel_dend[1]) - (axon_pixel[1]+multipixel_dend[2])
         
-        # make oversampling image
-        add_image,add_label = [],[]
-        add_distance_map = []
-        total_axon_pixel = 0
-        while need_pixel >= total_axon_pixel:
-            num_axon = np.random.choice(axon,30)
-            add_axon = labeldata[num_axon]
-            _,axon_pixels = np.unique(add_axon,return_counts=True)
-            total_axon_pixel += axon_pixels[1]
-            add_image.append(imgs[num_axon])
-            add_label.append(add_axon)
-            add_distance_map.append(distance_map[num_axon])
+    #     # make oversampling image
+    #     add_image,add_label = [],[]
+    #     add_distance_map = []
+    #     total_axon_pixel = 0
+    #     while need_pixel >= total_axon_pixel:
+    #         num_axon = np.random.choice(axon,30)
+    #         add_axon = labeldata[num_axon]
+    #         _,axon_pixels = np.unique(add_axon,return_counts=True)
+    #         total_axon_pixel += axon_pixels[1]
+    #         add_image.append(imgs[num_axon])
+    #         add_label.append(add_axon)
+    #         add_distance_map.append(distance_map[num_axon])
 
-        add_image,add_label= np.array(add_image), np.array(add_label)
-        add_distance_map = np.array(add_distance_map)
+    #     add_image,add_label= np.array(add_image), np.array(add_label)
+    #     add_distance_map = np.array(add_distance_map)
 
-        num,patch,im_size,_=add_image.shape
-        add_image = np.reshape(add_image,(num*patch,im_size,im_size))
-        add_label = np.reshape(add_label,(num*patch,im_size,im_size))
-        add_distance_map = np.reshape(add_distance_map,(num*patch,im_size,im_size))
+    #     num,patch,im_size,_=add_image.shape
+    #     add_image = np.reshape(add_image,(num*patch,im_size,im_size))
+    #     add_label = np.reshape(add_label,(num*patch,im_size,im_size))
+    #     add_distance_map = np.reshape(add_distance_map,(num*patch,im_size,im_size))
 
-        imgs = np.concatenate((add_image,imgs),axis=0)
-        labels = np.concatenate((add_label,labeldata),axis=0)
-        distance_map = np.concatenate((add_distance_map,distance_map),axis=0)
+    #     imgs = np.concatenate((add_image,imgs),axis=0)
+    #     labels = np.concatenate((add_label,labeldata),axis=0)
+    #     distance_map = np.concatenate((add_distance_map,distance_map),axis=0)
         
-        print(f"Number of pixels : {total_axon_pixel,need_pixel}")
-        return imgs, labels,distance_map
+    #     print(f"Number of pixels : {total_axon_pixel,need_pixel}")
+    #     return imgs, labels,distance_map
 
     def __len__(self):
         self.number_img = len(self.imgs)
@@ -203,8 +162,16 @@ class mydataset_2d(Dataset):
     def __getitem__(self,index):
         
         image = np.array(self.imgs[index])
+        # zero-one normalized
+        image = (image - image.min()) / (image.max() - image.min())
         label = np.array(self.labels[index])
-        distance = np.array(self.distance_map[index])
+        
+        dist_img = distance_transform_edt(label>0)
+        dist_img = (dist_img - dist_img.min())/ (dist_img.max() - dist_img.min())
+        
+        # distance = np.array(self.distance_map[index])
+
+
                 
         if self.phase =='train':
             if label.any() == 3:
